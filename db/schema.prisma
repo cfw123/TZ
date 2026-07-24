@@ -1,0 +1,118 @@
+// =====================================================================
+// Prisma Schema — 原运装置 4 个台账表
+// 字段与 4 张中文台账图片 1:1 对应（每张 14 列内容相同，仅台账名称不同）
+// Provider: mysql (可改为 postgresql/sqlserver，字段类型保持一致)
+// =====================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------
+// Table 1: 原运装置原料煤卸输煤记录
+// ---------------------------------------------------------------------
+model RawCoalRecord {
+  id                  BigInt   @id @default(autoincrement())
+  sequenceNo          Int                                              // 序号
+  recordDate          DateTime @db.Date                                // 日期
+  carNumber           String?  @db.VarChar(64)                         // 车号
+  carType             String?  @db.VarChar(64)                         // 车型
+  cargoName           String?  @db.VarChar(128)                        // 货名
+  shipperUnit         String?  @db.VarChar(128)                        // 发货单位
+  consigneeUnit       String?  @db.VarChar(128)                        // 收货单位
+  shippedQuantity     Decimal? @db.Decimal(12, 2)                      // 发运数量(吨)
+  receivedQuantity    Decimal? @db.Decimal(12, 2)                      // 实收数量(吨)
+  shortageQuantity    Decimal? @db.Decimal(12, 2)                      // 亏吨数量(吨)
+  shortageRate        Decimal? @db.Decimal(8, 4)                       // 亏吨率(%)
+  weighman            String?  @db.VarChar(64)                         // 司磅员
+  unloadingLocation   String?  @db.VarChar(128)                        // 卸车地点
+  remark              String?  @db.VarChar(500)                        // 备注
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("raw_coal_record")
+  @@index([recordDate], name: "idx_raw_coal_record_date")
+}
+
+// ---------------------------------------------------------------------
+// Table 2: 原运装置燃料煤卸输煤记录
+// ---------------------------------------------------------------------
+model FuelCoalRecord {
+  id                  BigInt   @id @default(autoincrement())
+  sequenceNo          Int                                              // 序号
+  recordDate          DateTime @db.Date                                // 日期
+  carNumber           String?  @db.VarChar(64)                         // 车号
+  carType             String?  @db.VarChar(64)                         // 车型
+  cargoName           String?  @db.VarChar(128)                        // 货名
+  shipperUnit         String?  @db.VarChar(128)                        // 发货单位
+  consigneeUnit       String?  @db.VarChar(128)                        // 收货单位
+  shippedQuantity     Decimal? @db.Decimal(12, 2)                      // 发运数量(吨)
+  receivedQuantity    Decimal? @db.Decimal(12, 2)                      // 实收数量(吨)
+  shortageQuantity    Decimal? @db.Decimal(12, 2)                      // 亏吨数量(吨)
+  shortageRate        Decimal? @db.Decimal(8, 4)                       // 亏吨率(%)
+  weighman            String?  @db.VarChar(64)                         // 司磅员
+  unloadingLocation   String?  @db.VarChar(128)                        // 卸车地点
+  remark              String?  @db.VarChar(500)                        // 备注
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("fuel_coal_record")
+  @@index([recordDate], name: "idx_fuel_coal_record_date")
+}
+
+// ---------------------------------------------------------------------
+// Table 3: 原运装置细渣提精煤卸输煤记录
+// ---------------------------------------------------------------------
+model FineSlagUpgradedCoalRecord {
+  id                  BigInt   @id @default(autoincrement())
+  sequenceNo          Int                                              // 序号
+  recordDate          DateTime @db.Date                                // 日期
+  carNumber           String?  @db.VarChar(64)                         // 车号
+  carType             String?  @db.VarChar(64)                         // 车型
+  cargoName           String?  @db.VarChar(128)                        // 货名
+  shipperUnit         String?  @db.VarChar(128)                        // 发货单位
+  consigneeUnit       String?  @db.VarChar(128)                        // 收货单位
+  shippedQuantity     Decimal? @db.Decimal(12, 2)                      // 发运数量(吨)
+  receivedQuantity    Decimal? @db.Decimal(12, 2)                      // 实收数量(吨)
+  shortageQuantity    Decimal? @db.Decimal(12, 2)                      // 亏吨数量(吨)
+  shortageRate        Decimal? @db.Decimal(8, 4)                       // 亏吨率(%)
+  weighman            String?  @db.VarChar(64)                         // 司磅员
+  unloadingLocation   String?  @db.VarChar(128)                        // 卸车地点
+  remark              String?  @db.VarChar(500)                        // 备注
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("fine_slag_upgraded_coal_record")
+  @@index([recordDate], name: "idx_fine_slag_record_date")
+}
+
+// ---------------------------------------------------------------------
+// Table 4: 原运装置干化污泥卸输煤记录
+// ---------------------------------------------------------------------
+model DriedSludgeRecord {
+  id                  BigInt   @id @default(autoincrement())
+  sequenceNo          Int                                              // 序号
+  recordDate          DateTime @db.Date                                // 日期
+  carNumber           String?  @db.VarChar(64)                         // 车号
+  carType             String?  @db.VarChar(64)                         // 车型
+  cargoName           String?  @db.VarChar(128)                        // 货名
+  shipperUnit         String?  @db.VarChar(128)                        // 发货单位
+  consigneeUnit       String?  @db.VarChar(128)                        // 收货单位
+  shippedQuantity     Decimal? @db.Decimal(12, 2)                      // 发运数量(吨)
+  receivedQuantity    Decimal? @db.Decimal(12, 2)                      // 实收数量(吨)
+  shortageQuantity    Decimal? @db.Decimal(12, 2)                      // 亏吨数量(吨)
+  shortageRate        Decimal? @db.Decimal(8, 4)                       // 亏吨率(%)
+  weighman            String?  @db.VarChar(64)                         // 司磅员
+  unloadingLocation   String?  @db.VarChar(128)                        // 卸车地点
+  remark              String?  @db.VarChar(500)                        // 备注
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("dried_sludge_record")
+  @@index([recordDate], name: "idx_dried_sludge_record_date")
+}
