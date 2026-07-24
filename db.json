@@ -116,6 +116,21 @@
       "blendBurn": "",
       "updatedAt": 1784788381613,
       "id": "9uK9-1q1KTk"
+    },
+    {
+      "__id": "085326e5-3870-46f3-989e-a253a6dc573d",
+      "date": "2026-07-12",
+      "bin": "1",
+      "boilerDay": "100",
+      "boilerMonth": "",
+      "boilerYear": "",
+      "inbound": "",
+      "stockA": "",
+      "stockB": "",
+      "stockTotal": "",
+      "blendBurn": "",
+      "updatedAt": 1784855199608,
+      "id": "TPJvUoxHzsE"
     }
   ],
   "fuel_coal_rows": [
