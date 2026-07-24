@@ -84,7 +84,7 @@
             >
               <td class="td-fixed-left td-batch">{{ row.batch }}</td>
               <td class="td-fixed-left-2">
-                <input class="cell-input" v-model="row.subtotal" @input="onInput" />
+                <input class="cell-input" v-model="row.subtotal" @input="onInput" @focus="e => (e.target as HTMLInputElement).select()" />
               </td>
               <!-- One <td> per entry in ALL_COLS — exact same array Tier-2 uses -->
               <td
@@ -98,6 +98,7 @@
                   :disabled="col.disabled"
                   :value="col.disabled ? forceZero(row, col.cat + col.sub) : (row as Record<string, string>)[col.cat + col.sub]"
                   @input="e => onCellInput(e, row, col)"
+                  @focus="e => (e.target as HTMLInputElement).select()"
                 />
               </td>
             </tr>
@@ -131,13 +132,13 @@
             >
               <td class="td-fixed-left td-batch">{{ row.batch }}</td>
               <td class="td-fixed-left-2">
-                <input class="cell-input" v-model="row.subtotal" @input="onInput" />
+                <input class="cell-input" v-model="row.subtotal" @focus="e => (e.target as HTMLInputElement).select()" @blur="row.subtotal = String((parseFloat(row.coal_A) || 0) + (parseFloat(row.coal_B) || 0))" />
               </td>
               <td>
-                <input class="cell-input" v-model="row.coal_A" @input="onInput" />
+                <input class="cell-input" v-model="row.coal_A" @input="onGasCellInput(row)" @focus="e => (e.target as HTMLInputElement).select()" />
               </td>
               <td>
-                <input class="cell-input" v-model="row.coal_B" @input="onInput" />
+                <input class="cell-input" v-model="row.coal_B" @input="onGasCellInput(row)" @focus="e => (e.target as HTMLInputElement).select()" />
               </td>
             </tr>
           </tbody>
@@ -161,7 +162,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 
 // ---------------------------------------------------------------------------
 // Requirement 1: Fine-grained visibility — 12 independent boolean keys
@@ -183,15 +184,41 @@ const CAT_LABELS: Record<string, string> = {
 type ColKey = 'hl_A' | 'hl_B' | 'jz_A' | 'jz_B' | 'xz_A' | 'xz_B'
             | 'wn_A' | 'wn_B' | 'yl_A' | 'yl_B' | 'lx_A' | 'lx_B'
 
-// 12 independent visibility flags, all default to visible (true)
-const colVisibility = ref<Record<ColKey, boolean>>({
+const STORAGE_KEY = 'boiler_col_visibility'
+
+const DEFAULT_VISIBILITY: Record<ColKey, boolean> = {
   hl_A: true, hl_B: true,
   jz_A: true, jz_B: true,
   xz_A: true, xz_B: true,
   wn_A: true, wn_B: true,
   yl_A: true, yl_B: true,
   lx_A: true, lx_B: true,
-})
+}
+
+function loadVisibilityFromStorage(): Record<ColKey, boolean> {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      return { ...DEFAULT_VISIBILITY, ...parsed }
+    }
+  } catch (e) {
+    console.warn('[DailyConsumption] Failed to parse saved visibility state, using defaults.')
+  }
+  return { ...DEFAULT_VISIBILITY }
+}
+
+// 12 independent visibility flags, loaded from localStorage or defaulting to visible (true)
+const colVisibility = ref<Record<ColKey, boolean>>(loadVisibilityFromStorage())
+
+// Persist visibility state to localStorage whenever it changes
+watch(colVisibility, (newVal) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(newVal))
+  } catch (e) {
+    console.warn('[DailyConsumption] Failed to save visibility state to localStorage.')
+  }
+}, { deep: true })
 
 // ---------------------------------------------------------------------------
 // Tier-2 silo labels — include material name so every column is self-identifying
@@ -267,9 +294,24 @@ const CAT_COLSPANS = computed<Record<string, number>>(() => {
 /**
  * Toggle a single silo on/off. When disabled the cell becomes :disabled and
  * its display value is forced to "0" via forceZero(); boilerData is untouched.
+ * Requirement 2: Data Safety Guardrail — block hiding if column has non-zero data.
  */
 function toggleSilo(cat: string, sub: '_A' | '_B') {
   const key = cat + sub as ColKey
+
+  // If currently visible, check for non-zero data before hiding
+  if (colVisibility.value[key]) {
+    const hasActiveData = boilerData.value.some(row => {
+      const val = (row as unknown as Record<string, string>)[key]
+      return val !== undefined && val !== '' && val !== '0'
+    })
+
+    if (hasActiveData) {
+      showToast('error', '该列已存在非零数据，禁止隐藏！')
+      return
+    }
+  }
+
   colVisibility.value = { ...colVisibility.value, [key]: !colVisibility.value[key] }
 }
 
@@ -291,6 +333,7 @@ function forceZero(_row: BoilerRow, _key: string): string {
 /**
  * Handle input for a silo cell. When the silo is enabled, write to boilerData.
  * When disabled, ignore input entirely — forceZero keeps the display at "0".
+ * Also auto-updates row subtotal and the 总计 row.
  */
 function onCellInput(e: Event, row: BoilerRow, col: ColDef) {
   if (col.disabled) return
@@ -298,6 +341,31 @@ function onCellInput(e: Event, row: BoilerRow, col: ColDef) {
   const target = e.target as HTMLInputElement
   ;(row as unknown as Record<string, string>)[key] = target.value
   dirty.value = true
+
+  // Auto-update subtotal for this row (if not the 总计 row)
+  if (row.batch !== '总计') {
+    const sum = sumRowFields(row as unknown as Record<string, string | number>, ['batch'])
+    row.subtotal = String(sum)
+  }
+
+  // Auto-update the 总计 row
+  const totalRow = boilerData.value[boilerData.value.length - 1]
+  if (totalRow.batch === '总计') {
+    for (const cat of ALL_CATS) {
+      const valA = boilerData.value.reduce((acc, r, i) => {
+        if (i === boilerData.value.length - 1) return acc
+        return acc + (parseFloat(String((r as unknown as Record<string, string>)[cat + '_A'])) || 0)
+      }, 0)
+      const valB = boilerData.value.reduce((acc, r, i) => {
+        if (i === boilerData.value.length - 1) return acc
+        return acc + (parseFloat(String((r as unknown as Record<string, string>)[cat + '_B'])) || 0)
+      }, 0)
+      ;(totalRow as unknown as Record<string, string>)[cat + '_A'] = String(valA)
+      ;(totalRow as unknown as Record<string, string>)[cat + '_B'] = String(valB)
+    }
+    const totalSum = sumRowFields(totalRow as unknown as Record<string, string | number>, ['batch'])
+    totalRow.subtotal = String(totalSum)
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -371,6 +439,23 @@ const toast = reactive({
 
 function onInput() {
   dirty.value = true
+}
+
+/** Auto-update gas row subtotal and 总计 row when coal_A or coal_B changes. */
+function onGasCellInput(row: GasRow) {
+  if (row.batch !== '总计') {
+    const valA = parseFloat(row.coal_A) || 0
+    const valB = parseFloat(row.coal_B) || 0
+    row.subtotal = String(valA + valB)
+  }
+  const totalRow = gasData.value[gasData.value.length - 1]
+  if (totalRow.batch === '总计') {
+    const valA = gasData.value.reduce((acc, r, i) => i === gasData.value.length - 1 ? acc : acc + (parseFloat(r.coal_A) || 0), 0)
+    const valB = gasData.value.reduce((acc, r, i) => i === gasData.value.length - 1 ? acc : acc + (parseFloat(r.coal_B) || 0), 0)
+    totalRow.coal_A = String(valA)
+    totalRow.coal_B = String(valB)
+    totalRow.subtotal = String(valA + valB)
+  }
 }
 
 function showToast(type: 'success' | 'error' | 'info', message: string) {
