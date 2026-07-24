@@ -627,6 +627,12 @@ function insertRowByDate(newRow) {
 // ————————————————————————————————————————
 async function initData() {
   try {
+    /**
+     * GET /api/v1/fine-slag-coal
+     * @param {string} table  'fine_slag_coal_rows'
+     * @returns {FineSlagCoalRow[]}  记录数组；若数据库为空返回 []
+     * @throws 网络错误时 catch 捕获，rows.value 设为 []
+     */
     const data = await api.list('fine_slag_coal_rows')
     rows.value = (data || []).map((r) => ({
       ...r,
@@ -644,6 +650,12 @@ async function initData() {
 
 
 // 全量持久化（手动点「保存」时触发）
+/**
+ * DELETE /api/v1/fine-slag-coal
+ * POST  /api/v1/fine-slag-coal/bulk
+ * @description 替换式全量保存：先 api.clear() 清空，再 api.bulkPut() 批量写入。
+ * @returns {Promise<boolean>}  true=成功，false=失败
+ */
 async function persist() {
   try {
     const payload = rows.value.map(({ __seq, __isNew, __modified, ...rest }) => {
@@ -696,6 +708,11 @@ function handleAdd() {
   })
 }
 
+/**
+ * PUT    /api/v1/fine-slag-coal/:id
+ * POST   /api/v1/fine-slag-coal
+ * @description 单行 Upsert：有 id → PUT，无 id → POST 创建并回填 id。
+ */
 async function dbUpsertRow(row) {
   const clean = { ...row }
   delete clean.__seq; delete clean.__isNew; delete clean.__modified; delete clean.__dbId
@@ -708,6 +725,10 @@ async function dbUpsertRow(row) {
   }
 }
 
+/**
+ * DELETE /api/v1/fine-slag-coal/:id
+ * @description 按主键 id 删除单条记录；若 row.id 不存在则跳过。
+ */
 async function dbDeleteRow(row) {
   if (row.id) await api.remove('fine_slag_coal_rows', row.id)
 }
@@ -780,6 +801,11 @@ async function commitDialog() {
     rows.value = []
     editingId.value = null
     editingRowSnapshot.value = null
+    /**
+     * kind === 'clearAll':
+     * DELETE /api/v1/fine-slag-coal
+     * @description 清空整表：snapshot → rows=[] → api.clear() → undo 可恢复。
+     */
     try {
       await api.clear('fine_slag_coal_rows')
     } catch (_) {}

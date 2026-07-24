@@ -618,6 +618,13 @@ function insertRowByDate(newRow) {
 // ————————————————————————————————————————
 async function initData() {
   try {
+    /**
+     * GET /api/v1/dried-sludge
+     * 获取干化污泥台账全部记录，按 date 升序返回。
+     * @param {string} table  'dried_sludge_rows'
+     * @returns {DriedSludgeRow[]}  记录数组；若数据库为空返回 []
+     * @throws 网络错误时 catch 捕获，rows.value 设为 []
+     */
     const data = await api.list('dried_sludge_rows')
     rows.value = (data || []).map((r) => ({
       ...r,
@@ -634,6 +641,15 @@ async function initData() {
 }
 
 // 全量持久化
+/**
+ * DELETE /api/v1/dried-sludge        — 先清空整表
+ * POST  /api/v1/dried-sludge/bulk   — 再批量写入 rows
+ *
+ * @description 替换式全量保存：先 api.clear() 清空，再 api.bulkPut() 批量插入。
+ *   数据流：rows.value → 剔除 __seq / __isNew / __modified / id → 添加 updatedAt
+ *   成功时重置 dirty=false 并更新签名；失败时返回 false，调用方展示错误提示。
+ * @returns {Promise<boolean>}  true=成功，false=失败
+ */
 async function persist() {
   try {
     const payload = rows.value.map(({ __seq, __isNew, __modified, ...rest }) => {
@@ -685,6 +701,16 @@ function handleAdd() {
   })
 }
 
+/**
+ * PUT    /api/v1/dried-sludge/:id   — row.id 存在时，更新该记录
+ * POST   /api/v1/dried-sludge       — row.id 不存在时，创建新记录
+ *
+ * @description 单行 Upsert。
+ *   - 若 row.id 已赋值 → PUT /dried-sludge/:id，替换式更新。
+ *   - 若 row.id 为空   → POST /dried-sludge，插入后取返回的 id 回填 row.id。
+ *   内部自动剔除 __seq / __isNew / __modified / __dbId。
+ * @param {DriedSludgeRow} row  带 __isNew / __modified 等元数据的行对象
+ */
 async function dbUpsertRow(row) {
   const clean = { ...row }
   delete clean.__seq; delete clean.__isNew; delete clean.__modified; delete clean.__dbId
@@ -697,6 +723,13 @@ async function dbUpsertRow(row) {
   }
 }
 
+/**
+ * DELETE /api/v1/dried-sludge/:id
+ *
+ * @description 按主键 id 删除单条记录。
+ *   若 row.id 不存在（新增行未落库），则跳过不调用。
+ * @param {DriedSludgeRow} row
+ */
 async function dbDeleteRow(row) {
   if (row.id) await api.remove('dried_sludge_rows', row.id)
 }
@@ -769,6 +802,13 @@ async function commitDialog() {
     rows.value = []
     editingId.value = null
     editingRowSnapshot.value = null
+    /**
+     * kind === 'clearAll' 分支:
+     * DELETE /api/v1/dried-sludge   带 confirm=confirm 参数（由 api.clear 内部处理）
+     *
+     * @description 清空整表：snapshot 暂存 rows → rows.value = [] → api.clear() → undo 可恢复。
+     *   api.clear() 失败静默吞掉（undo 流程会重新 persist 整表）。
+     */
     try {
       await api.clear('dried_sludge_rows')
     } catch (_) {}
