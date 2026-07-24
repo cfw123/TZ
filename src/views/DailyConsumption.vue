@@ -1,8 +1,11 @@
 <template>
   <div class="view-container">
-    <h2 class="view-title">锅炉/气化当日消耗台账</h2>
+    <h2 class="view-title">锅炉/气化 {{ displayDate }} 消耗台账</h2>
 
     <div class="toolbar">
+      <div class="date-selector">
+        <input type="date" v-model="selectedDate" />
+      </div>
       <div class="toolbar-actions">
         <button class="btn btn-primary" @click="calculateMatrix">自动核算</button>
         <button class="btn btn-secondary" @click="handleSave">保存</button>
@@ -14,7 +17,7 @@
          ============================================================ -->
     <div class="section-block">
       <div class="section-header">
-        <span class="section-title">锅炉当日消耗</span>
+        <span class="section-title">锅炉 {{ displayDate }} 消耗</span>
       </div>
 
       <!-- Requirement 1: Horizontal Card Grid Control Panel — replaces crowded popover -->
@@ -112,7 +115,7 @@
          ============================================================ -->
     <div class="section-block">
       <div class="section-header">
-        <span class="section-title">气化当日消耗</span>
+        <span class="section-title">气化 {{ displayDate }} 消耗</span>
       </div>
       <div class="table-wrapper">
         <table class="coal-table">
@@ -219,6 +222,27 @@ watch(colVisibility, (newVal) => {
     console.warn('[DailyConsumption] Failed to save visibility state to localStorage.')
   }
 }, { deep: true })
+
+// ---------------------------------------------------------------------------
+// Requirement 1: Reactive Date State
+// ---------------------------------------------------------------------------
+function toLocalDateString(date: Date): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+const selectedDate = ref(toLocalDateString(new Date()))
+
+const displayDate = computed(() => {
+  if (!selectedDate.value) return '当日'
+  return selectedDate.value.replace(/-/g, '/')
+})
+
+watch(selectedDate, (newVal) => {
+  console.log('Fetch data for:', newVal)
+})
 
 // ---------------------------------------------------------------------------
 // Tier-2 silo labels — include material name so every column is self-identifying
@@ -547,6 +571,8 @@ function handleSave() {
   //   storage limits.
   // ---------------------------------------------------------------------------
   const payload = {
+    // Requirement 3: Date identification
+    date: selectedDate.value,
     // Table 1 — Boiler
     boiler: {
       rows: boilerData.value.map(row => ({
@@ -617,6 +643,16 @@ function handleSave() {
   align-items: center;
   gap: 8px;
   margin-bottom: 10px;
+}
+
+.date-selector input {
+  height: 32px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 0 10px;
+  color: #1e3a5f;
+  font-weight: 600;
+  font-size: 14px;
 }
 
 /* -----------------------------------------------------------------------
