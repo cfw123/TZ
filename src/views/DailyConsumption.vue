@@ -16,32 +16,61 @@
       <div class="section-header">
         <span class="section-title">锅炉当日消耗</span>
       </div>
+
+      <!-- Requirement 1: Horizontal Card Grid Control Panel — replaces crowded popover -->
+      <div class="silo-control-panel">
+        <div
+          v-for="cat in ALL_CATS"
+          :key="cat"
+          class="silo-card"
+          :class="{ 'silo-card--inactive': !isVisible(cat, '_A') && !isVisible(cat, '_B') }"
+        >
+          <!-- Card: material name + master indicator -->
+          <div class="silo-card__name">{{ CAT_LABELS[cat] }}</div>
+
+          <!-- A/B silo toggle row -->
+          <div class="silo-card__toggles">
+            <button
+              class="silo-btn"
+              :class="{ 'silo-btn--active silo-btn--a': isVisible(cat, '_A') }"
+              @click="toggleSilo(cat, '_A')"
+            >
+              <span class="silo-btn__dot silo-btn__dot--a"></span>A仓
+            </button>
+            <button
+              class="silo-btn"
+              :class="{ 'silo-btn--active silo-btn--b': isVisible(cat, '_B') }"
+              @click="toggleSilo(cat, '_B')"
+            >
+              <span class="silo-btn__dot silo-btn__dot--b"></span>B仓
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Requirement 2: Table — NO v-if; disabled silos are grayed + forced to "0" -->
       <div class="table-wrapper">
         <table class="coal-table coal-table--multi">
           <thead>
+            <!-- Tier-1: material category, colspan derived from ALL_COLS active count per cat -->
             <tr class="tr-level-1">
               <th class="th-fixed-left" rowspan="2">批次</th>
               <th class="th-fixed-left-2" rowspan="2">小计</th>
-              <th colspan="2">黄陵混合煤</th>
-              <th colspan="2">建庄大块煤</th>
-              <th colspan="2">细渣煤</th>
-              <th colspan="2">污泥</th>
-              <th colspan="2">原料煤</th>
-              <th colspan="2">离心煤</th>
+              <th
+                v-for="cat in ALL_CATS"
+                :key="cat"
+                :colspan="getCatColspan(cat)"
+              >{{ CAT_LABELS[cat] }}</th>
             </tr>
+            <!-- Tier-2: one <th> per entry in ALL_COLS — exact same array the body uses -->
             <tr class="tr-level-2">
-              <th>207A</th>
-              <th>207B</th>
-              <th>207A</th>
-              <th>207B</th>
-              <th>207A</th>
-              <th>207B</th>
-              <th>207A</th>
-              <th>207B</th>
-              <th>207A</th>
-              <th>207B</th>
-              <th>207A</th>
-              <th>207B</th>
+              <th
+                v-for="col in ALL_COLS"
+                :key="col.cat + col.sub"
+                :class="{ 'th--disabled': col.disabled }"
+              >
+                <span class="th-silo-dot" :class="col.disabled ? 'silo-dot--muted' : col.sub === '_A' ? 'silo-dot--a' : 'silo-dot--b'"></span>{{ col.label }}
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -54,41 +83,19 @@
               <td class="td-fixed-left-2">
                 <input class="cell-input" v-model="row.subtotal" @input="onInput" />
               </td>
-              <td>
-                <input class="cell-input" v-model="row.hl_A" @input="onInput" />
-              </td>
-              <td>
-                <input class="cell-input" v-model="row.hl_B" @input="onInput" />
-              </td>
-              <td>
-                <input class="cell-input" v-model="row.jz_A" @input="onInput" />
-              </td>
-              <td>
-                <input class="cell-input" v-model="row.jz_B" @input="onInput" />
-              </td>
-              <td>
-                <input class="cell-input" v-model="row.xz_A" @input="onInput" />
-              </td>
-              <td>
-                <input class="cell-input" v-model="row.xz_B" @input="onInput" />
-              </td>
-              <td>
-                <input class="cell-input" v-model="row.wn_A" @input="onInput" />
-              </td>
-              <td>
-                <input class="cell-input" v-model="row.wn_B" @input="onInput" />
-              </td>
-              <td>
-                <input class="cell-input" v-model="row.yl_A" @input="onInput" />
-              </td>
-              <td>
-                <input class="cell-input" v-model="row.yl_B" @input="onInput" />
-              </td>
-              <td>
-                <input class="cell-input" v-model="row.lx_A" @input="onInput" />
-              </td>
-              <td>
-                <input class="cell-input" v-model="row.lx_B" @input="onInput" />
+              <!-- One <td> per entry in ALL_COLS — exact same array Tier-2 uses -->
+              <td
+                v-for="col in ALL_COLS"
+                :key="col.cat + col.sub"
+                :class="{ 'td--silo-disabled': col.disabled }"
+              >
+                <input
+                  class="cell-input"
+                  :class="{ 'cell-input--disabled': col.disabled }"
+                  :disabled="col.disabled"
+                  :value="col.disabled ? forceZero(row, col.cat + col.sub) : (row as Record<string, string>)[col.cat + col.sub]"
+                  @input="e => onCellInput(e, row, col)"
+                />
               </td>
             </tr>
           </tbody>
@@ -151,7 +158,139 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
+
+// ---------------------------------------------------------------------------
+// Requirement 1: Fine-grained visibility — 12 independent boolean keys
+//   Each silo (A or B) is toggled independently. Hiding a column does NOT
+//   clear its data; the value stays in boilerData for safe backend submission.
+// ---------------------------------------------------------------------------
+
+const ALL_CATS = ['hl', 'jz', 'xz', 'wn', 'yl', 'lx']
+
+const CAT_LABELS: Record<string, string> = {
+  hl: '黄陵混合煤',
+  jz: '建庄大块煤',
+  xz: '细渣煤',
+  wn: '污泥',
+  yl: '原料煤',
+  lx: '离心煤',
+}
+
+type ColKey = 'hl_A' | 'hl_B' | 'jz_A' | 'jz_B' | 'xz_A' | 'xz_B'
+            | 'wn_A' | 'wn_B' | 'yl_A' | 'yl_B' | 'lx_A' | 'lx_B'
+
+// 12 independent visibility flags, all default to visible (true)
+const colVisibility = ref<Record<ColKey, boolean>>({
+  hl_A: true, hl_B: true,
+  jz_A: true, jz_B: true,
+  xz_A: true, xz_B: true,
+  wn_A: true, wn_B: true,
+  yl_A: true, yl_B: true,
+  lx_A: true, lx_B: true,
+})
+
+// ---------------------------------------------------------------------------
+// Tier-2 silo labels — include material name so every column is self-identifying
+// e.g. '黄陵 - 207A', '建庄 - 207B', '污泥 - 207A', etc.
+// MUST be declared before computeColDef / ALL_COLS (const is not hoisted at runtime).
+// ---------------------------------------------------------------------------
+const catLabelsA: Record<string, string> = {
+  hl: '黄陵 - 207A',
+  jz: '建庄 - 207A',
+  xz: '细渣 - 207A',
+  wn: '污泥 - 207A',
+  yl: '原料煤 - 207A',
+  lx: '离心 - 207A',
+}
+const catLabelsB: Record<string, string> = {
+  hl: '黄陵 - 207B',
+  jz: '建庄 - 207B',
+  xz: '细渣 - 207B',
+  wn: '污泥 - 207B',
+  yl: '原料煤 - 207B',
+  lx: '离心 - 207B',
+}
+
+// ---------------------------------------------------------------------------
+// Requirement 1: Centralized column registry
+//   A flat, ordered array of all 12 silo columns. BOTH the Tier-2 <th> and
+//   the <td> body loop over this exact same array — eliminating any possibility
+//   of header/cell drift under any toggle combination.
+// ---------------------------------------------------------------------------
+
+interface ColDef {
+  cat: string        // e.g. 'hl'
+  sub: '_A' | '_B'  // e.g. '_A'
+  label: string     // e.g. '黄陵 - 207A'
+  disabled: boolean  // shorthand — true when this silo is toggled off
+}
+
+/** All 12 silo columns in guaranteed display order: hl_A, hl_B, jz_A, …
+ *  Filtered to exclude any column whose silo is toggled off — keeping the
+ *  Tier-2 <th> and <td> loops in perfect sync with the data row. */
+const ALL_COLS = computed<ColDef[]>(() =>
+  ALL_CATS.flatMap(cat =>
+    (['_A', '_B'] as const).map(sub => {
+      const key = (cat + sub) as ColKey
+      const labels = sub === '_A' ? catLabelsA : catLabelsB
+      return {
+        cat,
+        sub,
+        label: labels[cat],
+        disabled: !colVisibility.value[key],
+      }
+    })
+  ).filter(col => !col.disabled)
+)
+
+// ---------------------------------------------------------------------------
+// Cell interaction helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Toggle a single silo on/off. When disabled the cell becomes :disabled and
+ * its display value is forced to "0" via forceZero(); boilerData is untouched.
+ */
+function toggleSilo(cat: string, sub: '_A' | '_B') {
+  const key = cat + sub as ColKey
+  colVisibility.value = { ...colVisibility.value, [key]: !colVisibility.value[key] }
+}
+
+/** Check if a given silo (e.g. 'hl_A') is currently visible. */
+function isVisible(cat: string, sub: '_A' | '_B'): boolean {
+  const key = cat + sub as ColKey
+  return colVisibility.value[key]
+}
+
+/**
+ * Force a disabled cell's displayed value to "0" without mutating boilerData,
+ * so the backend always receives a stable string payload and manual parity is
+ * preserved for re-enabled silos.
+ */
+function forceZero(_row: BoilerRow, _key: string): string {
+  return '0'
+}
+
+/**
+ * Handle input for a silo cell. When the silo is enabled, write to boilerData.
+ * When disabled, ignore input entirely — forceZero keeps the display at "0".
+ */
+function onCellInput(e: Event, row: BoilerRow, col: ColDef) {
+  if (col.disabled) return
+  const key = col.cat + col.sub
+  const target = e.target as HTMLInputElement
+  ;(row as unknown as Record<string, string>)[key] = target.value
+  dirty.value = true
+}
+
+// ---------------------------------------------------------------------------
+// Tier-1 header colspan helper
+// ---------------------------------------------------------------------------
+/** Number of visible sub-columns for a given category (for Tier-1 colspan). */
+function getCatColspan(cat: string): number {
+  return ALL_COLS.value.filter(col => col.cat === cat).length
+}
 
 // ---------------------------------------------------------------------------
 // Business-rule 1: ABSOLUTE MANUAL PARITY
@@ -162,18 +301,12 @@ import { ref, reactive } from 'vue'
 interface BoilerRow {
   batch: string
   subtotal: string
-  hl_A: string
-  hl_B: string
-  jz_A: string
-  jz_B: string
-  xz_A: string
-  xz_B: string
-  wn_A: string
-  wn_B: string
-  yl_A: string
-  yl_B: string
-  lx_A: string
-  lx_B: string
+  hl_A: string; hl_B: string
+  jz_A: string; jz_B: string
+  xz_A: string; xz_B: string
+  wn_A: string; wn_B: string
+  yl_A: string; yl_B: string
+  lx_A: string; lx_B: string
 }
 
 interface GasRow {
@@ -186,18 +319,12 @@ interface GasRow {
 const makeBoilerRow = (batch: string): BoilerRow => ({
   batch,
   subtotal: '0',
-  hl_A: '0',
-  hl_B: '0',
-  jz_A: '0',
-  jz_B: '0',
-  xz_A: '0',
-  xz_B: '0',
-  wn_A: '0',
-  wn_B: '0',
-  yl_A: '0',
-  yl_B: '0',
-  lx_A: '0',
-  lx_B: '0',
+  hl_A: '0', hl_B: '0',
+  jz_A: '0', jz_B: '0',
+  xz_A: '0', xz_B: '0',
+  wn_A: '0', wn_B: '0',
+  yl_A: '0', yl_B: '0',
+  lx_A: '0', lx_B: '0',
 })
 
 const makeGasRow = (batch: string): GasRow => ({
@@ -314,7 +441,7 @@ function handleSave() {
   // ---------------------------------------------------------------------------
 
   // ---------------------------------------------------------------------------
-  // Business-rule 2: SLUDGE DATA ISOLATION
+  // Business-rule 4: SLUDGE DATA ISOLATION
   //   The sludge silo fields (wn_A, wn_B) are siblings of all other coal-type
   //   fields at the same flat level. The backend must treat them as a separate
   //   accounting category and MUST NOT deduct them from any fuel-coal 207
@@ -400,25 +527,160 @@ function handleSave() {
 }
 
 /* -----------------------------------------------------------------------
-   Section blocks
+   Requirement 1: Horizontal Card Grid Control Panel
+   6 large, spacious material cards above the table
    ----------------------------------------------------------------------- */
-.section-block {
-  margin-bottom: 36px;
+.silo-control-panel {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #f0f4f8 0%, #f8fafc 100%);
+  border: 1px solid #d4dde8;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
-.section-header {
+.silo-card {
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 10px;
-  margin-bottom: 10px;
+  padding: 14px 8px 12px;
+  background: #ffffff;
+  border: 1.5px solid #dce6f0;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  transition: border-color 0.2s, box-shadow 0.2s, opacity 0.2s;
 }
 
-.section-title {
-  font-size: 14px;
+.silo-card--inactive {
+  opacity: 0.5;
+  border-color: #e2e8f0;
+}
+
+.silo-card__name {
+  font-size: 13px;
   font-weight: 700;
-  color: #374151;
-  letter-spacing: 0.01em;
-  text-transform: uppercase;
+  color: #1e3a5f;
+  text-align: center;
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+}
+
+.silo-card__toggles {
+  display: flex;
+  gap: 6px;
+}
+
+/* Individual silo toggle button */
+.silo-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 5px;
+  border: 1.5px solid #cbd5e1;
+  background: #f8fafc;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.18s;
+  white-space: nowrap;
+}
+
+.silo-btn:hover {
+  border-color: #94a3b8;
+  color: #475569;
+  background: #f1f5f9;
+}
+
+.silo-btn--active {
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+}
+
+.silo-btn--active:hover {
+  filter: brightness(1.08);
+  color: #fff;
+}
+
+.silo-btn--active.silo-btn--a {
+  background: #4a7ab5;
+}
+
+.silo-btn--active.silo-btn--b {
+  background: #d97706;
+}
+
+.silo-btn__dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.silo-btn__dot--a {
+  background: #4a7ab5;
+}
+
+.silo-btn--active.silo-btn--a .silo-btn__dot--a {
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.silo-btn__dot--b {
+  background: #d97706;
+}
+
+.silo-btn--active.silo-btn--b .silo-btn__dot--b {
+  background: rgba(255, 255, 255, 0.85);
+}
+
+/* -----------------------------------------------------------------------
+   Tier-2 header silo dot — color-coded A/B + muted gray when disabled
+   ----------------------------------------------------------------------- */
+.th-silo-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+
+.silo-dot--a  { background: #4a7ab5; }
+.silo-dot--b  { background: #d97706; }
+.silo-dot--muted { background: #cbd5e1; }
+
+/* Tier-2 header cell — muted when its silo is disabled */
+.th--disabled {
+  color: #94a3b8 !important;
+}
+
+/* -----------------------------------------------------------------------
+   Disabled silo table cell
+   ----------------------------------------------------------------------- */
+.td--silo-disabled {
+  background: #f8fafc;
+}
+
+/* Disabled cell input — grayed dashed, clearly non-interactive */
+.cell-input--disabled {
+  background: #f1f5f9 !important;
+  border: 1.5px dashed #cbd5e1 !important;
+  color: #94a3b8 !important;
+  cursor: not-allowed !important;
+  font-weight: 500 !important;
+}
+
+.cell-input--disabled:focus {
+  box-shadow: none !important;
+  border-color: #cbd5e1 !important;
 }
 
 /* -----------------------------------------------------------------------
