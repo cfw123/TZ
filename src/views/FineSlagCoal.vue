@@ -72,17 +72,18 @@
           <td :class="['editable', { 'editable-active': editingId === row.__id }]">
             <input
               v-if="editingId === row.__id"
-              :value="row.date"
+              :value="draftValue(row.__id, 'date')"
               class="cell-input"
               @input="onCellInput(row.__id, 'date', $event.target.value)"
               @keydown="onCellKeydown($event, row.__id, 'date')"
+              @blur="onDateBlur(row.__id)"
             />
             <span v-else v-html="highlightCell(row.date, 'date', row.__id)"></span>
           </td>
           <td :class="['editable', { 'editable-active': editingId === row.__id }]">
             <input
               v-if="editingId === row.__id"
-              :value="row.bin"
+              :value="draftValue(row.__id, 'bin')"
               class="cell-input"
               @input="onCellInput(row.__id, 'bin', $event.target.value)"
               @keydown="onCellKeydown($event, row.__id, 'bin')"
@@ -92,7 +93,7 @@
           <td :class="['editable', { 'editable-active': editingId === row.__id }]">
             <input
               v-if="editingId === row.__id"
-              :value="row.boilerDay"
+              :value="draftValue(row.__id, 'boilerDay')"
               class="cell-input"
               @input="onCellInput(row.__id, 'boilerDay', $event.target.value)"
               @keydown="onCellKeydown($event, row.__id, 'boilerDay')"
@@ -102,7 +103,7 @@
           <td :class="['editable', { 'editable-active': editingId === row.__id }]">
             <input
               v-if="editingId === row.__id"
-              :value="row.boilerYear"
+              :value="draftValue(row.__id, 'boilerYear')"
               class="cell-input"
               @input="onCellInput(row.__id, 'boilerYear', $event.target.value)"
               @keydown="onCellKeydown($event, row.__id, 'boilerYear')"
@@ -112,7 +113,7 @@
           <td :class="['editable', { 'editable-active': editingId === row.__id }]">
             <input
               v-if="editingId === row.__id"
-              :value="row.boilerMonth"
+              :value="draftValue(row.__id, 'boilerMonth')"
               class="cell-input"
               @input="onCellInput(row.__id, 'boilerMonth', $event.target.value)"
               @keydown="onCellKeydown($event, row.__id, 'boilerMonth')"
@@ -122,7 +123,7 @@
           <td :class="['editable', { 'editable-active': editingId === row.__id }]">
             <input
               v-if="editingId === row.__id"
-              :value="row.inbound"
+              :value="draftValue(row.__id, 'inbound')"
               class="cell-input"
               @input="onCellInput(row.__id, 'inbound', $event.target.value)"
               @keydown="onCellKeydown($event, row.__id, 'inbound')"
@@ -132,7 +133,7 @@
           <td :class="['editable', { 'editable-active': editingId === row.__id }]">
             <input
               v-if="editingId === row.__id"
-              :value="row.stockA"
+              :value="draftValue(row.__id, 'stockA')"
               class="cell-input"
               @input="onCellInput(row.__id, 'stockA', $event.target.value)"
               @keydown="onCellKeydown($event, row.__id, 'stockA')"
@@ -142,7 +143,7 @@
           <td :class="['editable', { 'editable-active': editingId === row.__id }]">
             <input
               v-if="editingId === row.__id"
-              :value="row.stockB"
+              :value="draftValue(row.__id, 'stockB')"
               class="cell-input"
               @input="onCellInput(row.__id, 'stockB', $event.target.value)"
               @keydown="onCellKeydown($event, row.__id, 'stockB')"
@@ -152,7 +153,7 @@
           <td :class="['editable', { 'editable-active': editingId === row.__id }]">
             <input
               v-if="editingId === row.__id"
-              :value="row.stockTotal"
+              :value="draftValue(row.__id, 'stockTotal')"
               class="cell-input"
               @input="onCellInput(row.__id, 'stockTotal', $event.target.value)"
               @keydown="onCellKeydown($event, row.__id, 'stockTotal')"
@@ -375,16 +376,26 @@ const lastSavedSignature = ref('')
 const editingId = ref(null)
 const editingRowSnapshot = ref(null)
 
+// 稳定锚点：进入编辑时锁定该行原始月份键，编辑期间行始终归属该月桶，
+// 不因日期被清空/破坏而跳桶，直到 exitEditMode 提交时才重新排序。
+const snapshotMonthKey = ref(null)
+
+// 临时草稿：编辑期间所有字段修改先写到这里，不触碰 rows.value
+// 提交时一次性合并回 row，保证编辑过程中视图完全静态
+const editDraft = ref({})
+
+// 模板中输入框的绑定值：优先取草稿，否则取 row 原值
+function draftValue(rowId, field) {
+  if (editingId.value !== rowId) return null
+  const row = rows.value.find((r) => r.__id === rowId)
+  if (!row) return null
+  return field in editDraft.value ? editDraft.value[field] : row[field]
+}
+
 const editingRowSeq = computed(() => {
   if (!editingId.value) return 0
   const row = pagedRows.value.find((r) => r.__id === editingId.value)
   return row?.__seq ?? 0
-})
-
-const editingRowIsNew = computed(() => {
-  if (!editingId.value) return false
-  const row = rows.value.find((r) => r.__id === editingId.value)
-  return !!row?.__isNew
 })
 
 
@@ -434,20 +445,31 @@ function extractMonthKey(rawDate) {
 
 const activePageIndex = ref(0)
 
+// 桶构建期,把编辑中的行(清空/破坏日期)按快照日期锁定在原月桶。
+// 不变量:editingId 进入编辑时锁定该行原始月份键,编辑期间行始终归属该月桶,
+// 不因日期被清空/破坏而跳桶,直到 exitEditMode 提交时才重新排序。
 const monthBuckets = computed(() => {
   const map = new Map()
   rows.value.forEach((row, idx) => {
-    const key = extractMonthKey(row.date)
-    const bucketKey = key?.sortKey ?? '__unparsed__'
-    if (!map.has(bucketKey)) {
-      map.set(bucketKey, {
-        key: bucketKey,
-        label: key?.label ?? '未分类',
-        isUnparsed: !key,
+    // 编辑中的行始终使用快照月份键进行桶分配，保证日期被清空时行仍留在原桶
+    const isEditingRow = editingId.value === row.__id
+    const useSnapshot = isEditingRow && snapshotMonthKey.value !== null
+
+    const key = useSnapshot
+      ? snapshotMonthKey.value
+      : (extractMonthKey(row.date)?.sortKey ?? '__unparsed__')
+
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        label: useSnapshot
+          ? (extractMonthKey(editingRowSnapshot.value?.date)?.label ?? '未分类')
+          : (extractMonthKey(row.date)?.label ?? '未分类'),
+        isUnparsed: !useSnapshot && !extractMonthKey(row.date),
         originalIndexes: [],
       })
     }
-    map.get(bucketKey).originalIndexes.push(idx)
+    map.get(key).originalIndexes.push(idx)
   })
   const buckets = [...map.values()]
   buckets.sort((a, b) => {
@@ -463,6 +485,8 @@ watch(monthBuckets, (buckets) => {
     activePageIndex.value = 0
     return
   }
+  // 编辑期间不跳页，保持当前页不变
+  if (editingId.value) return
   if (activePageIndex.value >= buckets.length) {
     activePageIndex.value = buckets.length - 1
   }
@@ -486,6 +510,11 @@ function goToPage(idx) {
 
 function pageIndexOfRow(rowId) {
   const buckets = monthBuckets.value
+  // 如果该行正在编辑中，用快照月份键查找对应桶
+  if (editingId.value === rowId && snapshotMonthKey.value !== null) {
+    const idx = buckets.findIndex((b) => b.key === snapshotMonthKey.value)
+    return idx >= 0 ? idx : 0
+  }
   for (let i = 0; i < buckets.length; i++) {
     if (buckets[i].originalIndexes.some((origIdx) => rows.value[origIdx]?.__id === rowId)) {
       return i
@@ -514,8 +543,8 @@ const pagedRows = computed(() => {
     ? rawPage.filter((row) => columns.some((col) => String(row[col] ?? '').toLowerCase().includes(lower)))
     : rawPage
 
-  // 如果正在编辑新增行，保持原有顺序（不重新排序）
-  if (editingId.value && editingRowIsNew.value) {
+  // 编辑期间完全不重排序，保持 rows.value 原序，视图静态不变
+  if (editingId.value) {
     return filtered.map((row, i) => ({ ...row, __seq: i + 1 }))
   }
 
@@ -905,20 +934,25 @@ function onCellInput(id, field, value) {
   if (editingId.value !== id) return
   const row = rows.value.find((r) => r.__id === id)
   if (!row) return
-  if (row[field] === value) return
-  row[field] = value
+  // 所有修改先写入草稿，不触碰 rows.value，避免触发响应式重排
+  if (editDraft.value[field] === value) return
+  editDraft.value = { ...editDraft.value, [field]: value }
   dirty.value = true
   if (field === 'stockA' || field === 'stockB') {
-    const a = parseFloat(row.stockA) || 0
-    const b = parseFloat(row.stockB) || 0
+    const draftA = field === 'stockA' ? value : (editDraft.value.stockA ?? row.stockA)
+    const draftB = field === 'stockB' ? value : (editDraft.value.stockB ?? row.stockB)
+    const a = parseFloat(draftA) || 0
+    const b = parseFloat(draftB) || 0
     const expected = (a + b).toFixed(2).replace(/\.00$/, '')
-    if (parseFloat(row.stockTotal) !== a + b) {
-      row.stockTotal = expected
+    const prevTotal = editDraft.value.stockTotal ?? row.stockTotal
+    if (String(prevTotal) !== expected) {
+      editDraft.value = { ...editDraft.value, stockTotal: expected }
     }
   }
 }
 
 function onRowFocusOut(event, id) {
+  // Guard against exitEditMode also resetting editingId before this fires
   if (editingId.value !== id) return
   const row = rows.value.find((r) => r.__id === id)
   if (row && row.__isNew) return
@@ -937,22 +971,20 @@ async function onCellKeydown(event, id, field) {
   if (editingId.value !== id) return
   if (event.key === 'Escape') {
     event.preventDefault()
-    const row = rows.value.find((r) => r.__id === id)
-    const original = String(row?.[field] ?? '')
     const target = event.target
+    const original = String(editingRowSnapshot.value?.[field] ?? '')
     if (target && 'value' in target) target.value = original
-    if (row && editingRowSnapshot.value) {
-      for (const key of columns) {
-        if (row[key] !== editingRowSnapshot.value[key]) {
-          row[key] = editingRowSnapshot.value[key]
-        }
-      }
-    }
-    exitEditMode({ skipCommit: true, showToast: false })
+    editDraft.value = { ...editingRowSnapshot.value }
+    await exitEditMode({ skipCommit: true, showToast: false })
   } else if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
     await exitEditMode()
   }
+}
+
+async function onDateBlur(id) {
+  if (editingId.value !== id) return
+  await exitEditMode()
 }
 
 async function enterEditMode(id, options = {}) {
@@ -971,8 +1003,12 @@ async function enterEditMode(id, options = {}) {
   if (!options.skipPageJump) {
     jumpToRowPage(id)
   }
-  editingRowSnapshot.value = { ...row }
+  const snapshot = { ...row }
+  editingRowSnapshot.value = snapshot
+  snapshotMonthKey.value = extractMonthKey(snapshot.date)?.sortKey ?? null
   editingId.value = id
+  // 初始化草稿 = 进入编辑时的行快照，编辑期间所有改动先写入草稿
+  editDraft.value = { ...snapshot }
   if (row.__isNew) {
     nextTick(() => {
       const tr = document.querySelector(`tr[data-row-id="${id}"]`)
@@ -1006,56 +1042,62 @@ async function exitEditMode({ skipCommit = false, showToast: show = true } = {})
   if (active && active.classList && (active.classList.contains('editable') || active.classList.contains('cell-input'))) {
     active.blur()
   }
+  // Capture these BEFORE nulling editingId so early-return paths can still clean up
   const id = editingId.value
   const snapshot = editingRowSnapshot.value
   editingId.value = null
+  editingRowSnapshot.value = null
+  snapshotMonthKey.value = null
 
   if (!id) {
-    editingRowSnapshot.value = null
+    editDraft.value = {}
     return
   }
 
   const row = rows.value.find((r) => r.__id === id)
 
   if (skipCommit) {
+    editDraft.value = {}
     if (row && row.__isNew && !hasRowChanged(row, snapshot)) {
       const idx = rows.value.findIndex((r) => r.__id === id)
       if (idx >= 0) rows.value.splice(idx, 1)
       reindex()
-      editingRowSnapshot.value = null
       return
     }
-    editingRowSnapshot.value = null
     return
   }
+
+  // 将草稿中的修改合并到 row（一次性写入，不在编辑过程中触发重排）
+  const draftDate = editDraft.value?.date
+  if (row) {
+    for (const key of columns) {
+      if (key in editDraft.value) {
+        row[key] = editDraft.value[key]
+      }
+    }
+  }
+  editDraft.value = {}
 
   if (row && row.__isNew && !hasRowChanged(row, snapshot)) {
     const idx = rows.value.findIndex((r) => r.__id === id)
     if (idx >= 0) rows.value.splice(idx, 1)
     reindex()
-    editingRowSnapshot.value = null
     return
   }
 
   if (row) row.__isNew = false
 
-  const wasNewRow = snapshot && snapshot.__isNew
-
   const result = await commitRowSave(id)
   if (!result.ok) {
     if (row && snapshot) revertRow(row, snapshot)
-    editingRowSnapshot.value = null
     if (show) showToast('error', '保存失败，请检查存储空间或浏览器权限')
     return
   }
-  editingRowSnapshot.value = null
-  const dateChanged = snapshot && extractMonthKey(snapshot.date)?.sortKey !== extractMonthKey(row?.date)?.sortKey
+  // 用草稿中的日期与快照对比，判断月份是否变化
+  const dateChanged = snapshot && extractMonthKey(snapshot.date)?.sortKey !== extractMonthKey(draftDate)?.sortKey
+  // 编辑完成（含新增）后按当前排序方向重新插入到正确位置
+  insertRowByDate(row)
   if (dateChanged) {
-    jumpToRowPage(id)
-  }
-  // 新增记录点击「完成」后，按日期排序到正确位置
-  if (wasNewRow) {
-    insertRowByDate(row)
     jumpToRowPage(id)
   }
   if (show && !result.skipped) {

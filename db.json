@@ -2,7 +2,7 @@
   "dried_sludge_rows": [
     {
       "__id": "91d453ed-115b-4402-a289-0281b71ddf40",
-      "date": "2026-07-2",
+      "date": "2026-07-",
       "bin": "1",
       "boilerDay": "50",
       "boilerMonth": "",
@@ -11,7 +11,7 @@
       "stockA": "",
       "stockB": "",
       "stockTotal": "",
-      "updatedAt": 1784780349989,
+      "updatedAt": 1784860111045,
       "id": "cUgmeQyacRU"
     },
     {
@@ -25,12 +25,12 @@
       "stockA": "",
       "stockB": "",
       "stockTotal": "",
-      "updatedAt": 1784780964224,
+      "updatedAt": 1784860861831,
       "id": "yh_IIPIHGwU"
     },
     {
       "__id": "cb568a2c-9fdb-453f-9684-ba07e9e51c8c",
-      "date": "2026-07-13",
+      "date": "2026-07-1",
       "bin": "3",
       "boilerDay": "200",
       "boilerMonth": "",
@@ -39,7 +39,7 @@
       "stockA": "",
       "stockB": "",
       "stockTotal": "",
-      "updatedAt": 1784780384363,
+      "updatedAt": 1784858660284,
       "id": "nOdcg7kRvGQ"
     },
     {
@@ -58,7 +58,7 @@
     },
     {
       "__id": "9ab6463b-f12e-4c54-8e6a-671d1b7047b3",
-      "date": "2026-07-23",
+      "date": "2026-06-12",
       "bin": "4",
       "boilerDay": "300",
       "boilerMonth": "",
@@ -67,12 +67,12 @@
       "stockA": "",
       "stockB": "",
       "stockTotal": "",
-      "updatedAt": 1784856415993,
+      "updatedAt": 1784858714303,
       "id": "ncKm7XObvp4"
     },
     {
       "__id": "08fa9faa-acc3-4b96-af34-a84ae57aa256",
-      "date": "2026-07-17",
+      "date": "2026-07-5",
       "bin": "5",
       "boilerDay": "100",
       "boilerMonth": "",
@@ -81,7 +81,7 @@
       "stockA": "",
       "stockB": "",
       "stockTotal": "",
-      "updatedAt": 1784783115860,
+      "updatedAt": 1784860127411,
       "id": "tRXm_rIYZB0"
     }
   ],
@@ -97,8 +97,36 @@
       "stockA": "",
       "stockB": "",
       "stockTotal": "",
-      "updatedAt": 1784780148324,
+      "updatedAt": 1784860496054,
       "id": "CePpsjAXtKM"
+    },
+    {
+      "__id": "3174d6d7-8849-4a38-8278-1e582a574426",
+      "date": "2026-07-24",
+      "bin": "2",
+      "boilerDay": "20",
+      "boilerMonth": "",
+      "boilerYear": "200",
+      "inbound": "",
+      "stockA": "",
+      "stockB": "",
+      "stockTotal": "",
+      "updatedAt": 1784860502335,
+      "id": "9vv64ZKRty8"
+    },
+    {
+      "__id": "9383be05-8826-4e61-9ae2-6024e5835df3",
+      "date": "2026-07-20",
+      "bin": "3",
+      "boilerDay": "200",
+      "boilerMonth": "",
+      "boilerYear": "300",
+      "inbound": "",
+      "stockA": "",
+      "stockB": "",
+      "stockTotal": "",
+      "id": "5lz9a1RUOmI",
+      "updatedAt": 1784861263133
     }
   ],
   "raw_coal_rows": [
