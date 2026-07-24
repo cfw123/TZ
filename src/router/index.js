@@ -27,6 +27,11 @@ const router = createRouter({
       name: 'rlm',
       component: () => import('../views/FuelCoal.vue'),
     },
+    {
+      path: '/drxhdh',
+      name: 'drxhdh',
+      component: () => import('../views/DailyConsumption.vue'),
+    },
   ],
 })
 
