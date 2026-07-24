@@ -514,16 +514,16 @@ function handleSave() {
    Layout
    ----------------------------------------------------------------------- */
 .view-container {
-  padding: 20px 24px 40px;
+  padding: 12px 28px 16px;
   min-height: 100vh;
   box-sizing: border-box;
 }
 
 .view-title {
-  font-size: 17px;
+  font-size: 24px;
   font-weight: 700;
   color: #1f2937;
-  margin: 0 0 16px 0;
+  margin: 0 0 10px 0;
   letter-spacing: -0.01em;
 }
 
@@ -531,7 +531,25 @@ function handleSave() {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 20px;
+  margin-bottom: 10px;
+}
+
+/* -----------------------------------------------------------------------
+   Section blocks with improved vertical spacing
+   ----------------------------------------------------------------------- */
+.section-block {
+  margin-bottom: 16px;
+}
+
+.section-header {
+  margin-bottom: 6px;
+}
+
+.section-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e3a5f;
+  letter-spacing: 0.01em;
 }
 
 .toolbar-actions {
@@ -548,8 +566,8 @@ function handleSave() {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
   gap: 10px;
-  margin-bottom: 14px;
-  padding: 14px 16px;
+  margin-bottom: 10px;
+  padding: 10px 14px;
   background: linear-gradient(135deg, #f0f4f8 0%, #f8fafc 100%);
   border: 1px solid #d4dde8;
   border-radius: 10px;
@@ -560,8 +578,8 @@ function handleSave() {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 14px 8px 12px;
+  gap: 6px;
+  padding: 8px 6px 8px;
   background: #ffffff;
   border: 1.5px solid #dce6f0;
   border-radius: 8px;
@@ -593,12 +611,12 @@ function handleSave() {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 5px 11px;
+  padding: 7px 14px;
   border-radius: 5px;
   border: 1.5px solid #cbd5e1;
   background: #f8fafc;
   color: #94a3b8;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
@@ -738,7 +756,7 @@ td.td-silo-b {
 .coal-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 14px;
   background: #fff;
   white-space: nowrap;
 }
@@ -748,19 +766,19 @@ td.td-silo-b {
 }
 
 .coal-table th {
-  padding: 8px 10px;
+  padding: 6px 12px;
   text-align: center;
   font-weight: 600;
   color: #334155;
   border-bottom: 1px solid #cbd5e1;
   border-right: 1px solid #e2e8f0;
   vertical-align: middle;
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.02em;
 }
 
 .coal-table tbody td {
-  padding: 6px 8px;
+  padding: 4px 10px;
   border-bottom: 1px solid #f0f2f5;
   border-right: 1px solid #f0f2f5;
   text-align: center;
@@ -789,12 +807,12 @@ td.td-silo-b:hover {
    ----------------------------------------------------------------------- */
 .tr-level-1 th {
   background: #e8edf3;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .tr-level-2 th {
   background: #f1f5f9;
-  font-size: 11px;
+  font-size: 12px;
   color: #64748b;
   font-weight: 500;
 }
@@ -803,7 +821,7 @@ td.td-silo-b:hover {
   background: #e2eaf5;
   color: #2c5282;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 /* -----------------------------------------------------------------------
@@ -868,12 +886,13 @@ td.td-silo-b:hover {
    Cell inputs
    ----------------------------------------------------------------------- */
 .cell-input {
-  width: 80px;
-  height: 28px;
-  padding: 0 8px;
+  width: 100px;
+  height: 30px;
+  padding: 0 10px;
   border: 1px solid #d0d5dd;
-  border-radius: 3px;
-  font-size: 13px;
+  border-radius: 4px;
+  font-size: 15px;
+  font-weight: 600;
   font-family: inherit;
   text-align: center;
   color: #1f2937;
@@ -910,11 +929,11 @@ td.td-silo-b .cell-input:focus {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  height: 32px;
-  padding: 0 14px;
-  border-radius: 4px;
-  font-size: 13px;
-  font-weight: 500;
+  height: 38px;
+  padding: 0 18px;
+  border-radius: 5px;
+  font-size: 14px;
+  font-weight: 600;
   font-family: inherit;
   cursor: pointer;
   transition: all 0.15s;
