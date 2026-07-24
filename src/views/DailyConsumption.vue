@@ -52,22 +52,25 @@
       <div class="table-wrapper">
         <table class="coal-table coal-table--multi">
           <thead>
-            <!-- Tier-1: material category, colspan derived from ALL_COLS active count per cat -->
+            <!-- Tier-1: material category, safely filtered by v-if -->
             <tr class="tr-level-1">
               <th class="th-fixed-left" rowspan="2">批次</th>
               <th class="th-fixed-left-2" rowspan="2">小计</th>
-              <th
-                v-for="cat in ALL_CATS"
-                :key="cat"
-                :colspan="getCatColspan(cat)"
-              >{{ CAT_LABELS[cat] }}</th>
+              <template v-for="cat in ALL_CATS" :key="cat">
+                <th
+                  v-if="CAT_COLSPANS[cat] > 0"
+                  :colspan="CAT_COLSPANS[cat]"
+                >{{ CAT_LABELS[cat] }}</th>
+              </template>
             </tr>
-            <!-- Tier-2: one <th> per entry in ALL_COLS — exact same array the body uses -->
+            <!-- Tier-2: one <th> per entry in ALL_COLS -->
             <tr class="tr-level-2">
               <th
                 v-for="col in ALL_COLS"
                 :key="col.cat + col.sub"
-                :class="{ 'th--disabled': col.disabled }"
+                :class="[
+                  col.disabled ? 'th-disabled' : col.sub === '_A' ? 'th-silo-a' : 'th-silo-b',
+                ]"
               >
                 <span class="th-silo-dot" :class="col.disabled ? 'silo-dot--muted' : col.sub === '_A' ? 'silo-dot--a' : 'silo-dot--b'"></span>{{ col.label }}
               </th>
@@ -87,7 +90,7 @@
               <td
                 v-for="col in ALL_COLS"
                 :key="col.cat + col.sub"
-                :class="{ 'td--silo-disabled': col.disabled }"
+                :class="col.disabled ? 'td--silo-disabled' : col.sub === '_A' ? 'td-silo-a' : 'td-silo-b'"
               >
                 <input
                   class="cell-input"
@@ -244,6 +247,19 @@ const ALL_COLS = computed<ColDef[]>(() =>
   ).filter(col => !col.disabled)
 )
 
+/** Per-category visible column counts, derived from ALL_COLS.
+ *  Use an explicit computed (NOT a function called from template) so that
+ *  Vue 3's reactive tracking correctly invalidates every Tier-1 <th> on any
+ *  silo toggle. */
+const CAT_COLSPANS = computed<Record<string, number>>(() => {
+  const result: Record<string, number> = {}
+  for (const cat of ALL_CATS) result[cat] = 0
+  for (const col of ALL_COLS.value) {
+    result[col.cat] = (result[col.cat] || 0) + 1
+  }
+  return result
+})
+
 // ---------------------------------------------------------------------------
 // Cell interaction helpers
 // ---------------------------------------------------------------------------
@@ -285,12 +301,10 @@ function onCellInput(e: Event, row: BoilerRow, col: ColDef) {
 }
 
 // ---------------------------------------------------------------------------
-// Tier-1 header colspan helper
+// Tier-1 colspan is sourced from CAT_COLSPANS computed (defined above with
+// ALL_COLS) — using a computed rather than a function called inline in the
+// template guarantees Vue 3 re-evaluates every Tier-1 <th> on any toggle.
 // ---------------------------------------------------------------------------
-/** Number of visible sub-columns for a given category (for Tier-1 colspan). */
-function getCatColspan(cat: string): number {
-  return ALL_COLS.value.filter(col => col.cat === cat).length
-}
 
 // ---------------------------------------------------------------------------
 // Business-rule 1: ABSOLUTE MANUAL PARITY
@@ -662,11 +676,39 @@ function handleSave() {
   color: #94a3b8 !important;
 }
 
+/* Tier-2: A-column headers get blue tint, B-column headers get amber tint */
+.tr-level-2 th:not(.th-disabled) {
+  border-top: none;
+}
+.tr-level-2 th.th-silo-a {
+  background: #dbeafe;
+  color: #1e40af;
+  border-top: 2px solid #3b82f6;
+}
+.tr-level-2 th.th-silo-b {
+  background: #fef3c7;
+  color: #92400e;
+  border-top: 2px solid #f59e0b;
+}
+.tr-level-2 th.th-disabled {
+  background: #f1f5f9;
+  color: #94a3b8;
+  border-top: 2px solid #cbd5e1;
+}
+
 /* -----------------------------------------------------------------------
    Disabled silo table cell
    ----------------------------------------------------------------------- */
 .td--silo-disabled {
   background: #f8fafc;
+}
+
+/* A-silo cells: light blue tint; B-silo cells: light amber tint */
+td.td-silo-a {
+  background: #eff6ff;
+}
+td.td-silo-b {
+  background: #fffbeb;
 }
 
 /* Disabled cell input — grayed dashed, clearly non-interactive */
@@ -723,6 +765,19 @@ function handleSave() {
   border-right: 1px solid #f0f2f5;
   text-align: center;
   vertical-align: middle;
+}
+
+.coal-table tbody tr:hover td {
+  background-color: rgba(241, 245, 249, 0.5);
+}
+td.td-silo-a:hover {
+  background: #dbeafe !important;
+}
+td.td-silo-b:hover {
+  background: #fef3c7 !important;
+}
+.td--silo-disabled:hover {
+  background: #f8fafc !important;
 }
 
 .coal-table tbody tr:last-child td {
@@ -822,9 +877,9 @@ function handleSave() {
   font-family: inherit;
   text-align: center;
   color: #1f2937;
-  background: #fff;
+  background: transparent;
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .cell-input:focus {
@@ -832,8 +887,18 @@ function handleSave() {
   box-shadow: 0 0 0 2px rgba(74, 122, 181, 0.15);
 }
 
+/* A-silo input focus: blue ring; B-silo input focus: amber ring */
+td.td-silo-a .cell-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+td.td-silo-b .cell-input:focus {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+}
+
 .row-total .cell-input {
-  background: #f0f4f9;
+  background: transparent;
   font-weight: 700;
 }
 
