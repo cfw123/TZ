@@ -739,6 +739,7 @@ async function commitDialog() {
     reindex()
     dirty.value = true
     showUndo(`已删除 ${snapshot.date || '该记录'}`, async () => {
+      delete snapshot.id
       await dbUpsertRow(snapshot)
       rows.value.push({ ...snapshot, __isNew: false, __modified: false })
       reindex()
