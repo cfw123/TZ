@@ -441,16 +441,16 @@ const makeGasRow = (batch: string): GasRow => ({
 })
 
 const boilerData = ref<BoilerRow[]>([
-  makeBoilerRow('第一次'),
-  makeBoilerRow('第二次'),
-  makeBoilerRow('第三次'),
+  makeBoilerRow('大夜班'),
+  makeBoilerRow('白班'),
+  makeBoilerRow('小夜班'),
   makeBoilerRow('总计'),
 ])
 
 const gasData = ref<GasRow[]>([
-  makeGasRow('第一次'),
-  makeGasRow('第二次'),
-  makeGasRow('第三次'),
+  makeGasRow('大夜班'),
+  makeGasRow('白班'),
+  makeGasRow('小夜班'),
   makeGasRow('总计'),
 ])
 

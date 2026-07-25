@@ -42,19 +42,19 @@
               <th>错峰运行<br>执行情况</th>
               <th>锅炉运行筒仓</th>
               <th>锅炉上煤时间</th>
-              <th>锅炉当班上煤量<br>(吨)</th>
-              <th>锅炉当日上煤量<br>(吨)</th>
-              <th>锅炉上煤时长<br>(分)</th>
+              <th class="th-num">锅炉当班上煤量<br>(吨)</th>
+              <th class="th-num">锅炉当日上煤量<br>(吨)</th>
+              <th class="th-num">锅炉上煤时长<br>(分)</th>
               <th>气化运行筒仓</th>
               <th>气化上煤时间</th>
-              <th>气化当班上煤量<br>(吨)</th>
-              <th>气化当日上煤量<br>(吨)</th>
-              <th>气化上煤时长<br>(分)</th>
+              <th class="th-num">气化当班上煤量<br>(吨)</th>
+              <th class="th-num">气化当日上煤量<br>(吨)</th>
+              <th class="th-num">气化上煤时长<br>(分)</th>
               <th>原因说明</th>
               <th>备注</th>
               <th>汽车卸车时间</th>
-              <th>汽车卸车时长<br>(分)</th>
-              <th>汽车卸车数量<br>(辆)</th>
+              <th class="th-num">汽车卸车时长<br>(分)</th>
+              <th class="th-num">汽车卸车数量<br>(辆)</th>
             </tr>
           </thead>
           <tbody>
@@ -73,23 +73,23 @@
               <td>{{ rec.execution_status }}</td>
               <td>{{ rec.boiler_bins }}</td>
               <td>{{ rec.boiler_time }}</td>
-              <td class="td-clickable" @click="openDetail(rec)">
+              <td class="td-clickable td-num" @click="openDetail(rec, 'boiler')">
                 <span class="clickable-total">{{ rec.boiler_shift_total }}</span>
               </td>
-              <td>{{ rec.boiler_daily_total }}</td>
-              <td>{{ rec.boiler_duration }}</td>
+              <td class="td-num">{{ rec.boiler_daily_total }}</td>
+              <td class="td-num">{{ rec.boiler_duration }}</td>
               <td>{{ rec.gasification_bins }}</td>
               <td>{{ rec.gasification_time }}</td>
-              <td class="td-clickable" @click="openDetail(rec)">
+              <td class="td-clickable td-num" @click="openDetail(rec, 'gasification')">
                 <span class="clickable-total">{{ rec.gasification_shift_total }}</span>
               </td>
-              <td>{{ rec.gasification_daily_total }}</td>
-              <td>{{ rec.gasification_duration }}</td>
+              <td class="td-num">{{ rec.gasification_daily_total }}</td>
+              <td class="td-num">{{ rec.gasification_duration }}</td>
               <td>{{ rec.reason }}</td>
               <td>{{ rec.remarks }}</td>
               <td>{{ rec.truck_unload_time }}</td>
-              <td>{{ rec.truck_unload_duration }}</td>
-              <td>{{ rec.truck_count }}</td>
+              <td class="td-num">{{ rec.truck_unload_duration }}</td>
+              <td class="td-num">{{ rec.truck_count }}</td>
             </tr>
             <tr v-if="filteredRecords.length === 0">
               <td colspan="20" class="empty-row">暂无匹配数据</td>
@@ -107,7 +107,7 @@
             <div class="modal-title-group">
               <span class="modal-icon">📋</span>
               <div>
-                <h3 class="modal-title">运行记录详情</h3>
+                <h3 class="modal-title">{{ modalType === 'boiler' ? '锅炉消耗明细' : '气化消耗明细' }}</h3>
                 <p v-if="selectedRecord" class="modal-subtitle">
                   {{ selectedRecord.record_date }} · {{ selectedRecord.shift_batch }}
                 </p>
@@ -117,70 +117,8 @@
           </div>
 
           <div class="modal-body" v-if="selectedRecord">
-            <!-- Operation Info Summary -->
-            <section class="detail-section">
-              <div class="detail-section__title">
-                <span class="section-icon">⚙️</span>
-                <span>运行信息</span>
-              </div>
-              <div class="detail-grid">
-                <div class="detail-item">
-                  <span class="detail-label">记录ID</span>
-                  <span class="detail-value">{{ selectedRecord.id }}</span>
-                </div>
-                <div class="detail-item">
-                  <span class="detail-label">记录日期</span>
-                  <span class="detail-value">{{ selectedRecord.record_date }}</span>
-                </div>
-                <div class="detail-item">
-                  <span class="detail-label">班次</span>
-                  <span class="detail-value">{{ selectedRecord.shift_batch }}</span>
-                </div>
-                <div class="detail-item">
-                  <span class="detail-label">运行班组</span>
-                  <span class="detail-value">{{ selectedRecord.run_group }}</span>
-                </div>
-                <div class="detail-item">
-                  <span class="detail-label">错峰执行情况</span>
-                  <span class="detail-value">{{ selectedRecord.execution_status }}</span>
-                </div>
-                <div class="detail-item">
-                  <span class="detail-label">锅炉运行筒仓</span>
-                  <span class="detail-value">{{ selectedRecord.boiler_bins }}</span>
-                </div>
-                <div class="detail-item">
-                  <span class="detail-label">锅炉上煤时间</span>
-                  <span class="detail-value">{{ selectedRecord.boiler_time }}</span>
-                </div>
-                <div class="detail-item">
-                  <span class="detail-label">锅炉上煤时长(分)</span>
-                  <span class="detail-value">{{ selectedRecord.boiler_duration }}</span>
-                </div>
-                <div class="detail-item">
-                  <span class="detail-label">气化运行筒仓</span>
-                  <span class="detail-value">{{ selectedRecord.gasification_bins }}</span>
-                </div>
-                <div class="detail-item">
-                  <span class="detail-label">气化上煤时间</span>
-                  <span class="detail-value">{{ selectedRecord.gasification_time }}</span>
-                </div>
-                <div class="detail-item">
-                  <span class="detail-label">气化上煤时长(分)</span>
-                  <span class="detail-value">{{ selectedRecord.gasification_duration }}</span>
-                </div>
-                <div class="detail-item">
-                  <span class="detail-label">原因说明</span>
-                  <span class="detail-value">{{ selectedRecord.reason }}</span>
-                </div>
-                <div class="detail-item">
-                  <span class="detail-label">备注</span>
-                  <span class="detail-value">{{ selectedRecord.remarks }}</span>
-                </div>
-              </div>
-            </section>
-
             <!-- Boiler Consumption Section -->
-            <section class="detail-section">
+            <section class="detail-section" v-if="modalType === 'boiler'">
               <div class="detail-section__title">
                 <span class="section-icon">🔥</span>
                 <span>锅炉消耗明细</span>
@@ -233,11 +171,11 @@
                   </span>
                 </div>
                 <div class="detail-item">
-                  <span class="detail-label">原料煤 - A仓 (yl_A)</span>
+                  <span class="detail-label">原料煤 - A仓 </span>
                   <span class="detail-value">{{ selectedRecord.boiler_consumptions.yl_A }}</span>
                 </div>
                 <div class="detail-item">
-                  <span class="detail-label">原料煤 - B仓 (yl_B)</span>
+                  <span class="detail-label">原料煤 - B仓 </span>
                   <span class="detail-value">{{ selectedRecord.boiler_consumptions.yl_B }}</span>
                 </div>
                 <div class="detail-item">
@@ -253,7 +191,7 @@
             </section>
 
             <!-- Gasification Consumption Section -->
-            <section class="detail-section">
+            <section class="detail-section" v-if="modalType === 'gasification'">
               <div class="detail-section__title">
                 <span class="section-icon">💨</span>
                 <span>气化消耗明细</span>
@@ -497,15 +435,18 @@ const filteredRecords = computed<OperationRecord[]>(() => {
 // ---------------------------------------------------------------------------
 const showModal = ref(false)
 const selectedRecord = ref<OperationRecord | null>(null)
+const modalType = ref<'boiler' | 'gasification' | null>(null)
 
-function openDetail(rec: OperationRecord) {
+function openDetail(rec: OperationRecord, type: 'boiler' | 'gasification') {
   selectedRecord.value = rec
+  modalType.value = type
   showModal.value = true
 }
 
 function closeDetail() {
   showModal.value = false
   selectedRecord.value = null
+  modalType.value = null
 }
 
 // ---------------------------------------------------------------------------
@@ -723,8 +664,25 @@ function getShiftKey(shift: string): string {
   max-height: calc(100vh - 280px);
 }
 
+/* Sleek custom scrollbar */
+.table-wrapper::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.table-wrapper::-webkit-scrollbar-track {
+  background: transparent;
+}
+.table-wrapper::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+.table-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
 .record-table {
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   border-collapse: collapse;
   font-size: 13px;
   color: #1f2937;
@@ -741,15 +699,24 @@ function getShiftKey(shift: string): string {
   color: #1e3a5f;
   font-weight: 700;
   text-align: left;
-  padding: 10px 12px;
+  padding: 12px 16px;
   border-bottom: 2px solid #e2e8f0;
+  border-right: 1px solid #e2e8f0;
   white-space: nowrap;
 }
 
 .record-table tbody td {
-  padding: 9px 12px;
+  padding: 10px 16px;
   border-bottom: 1px solid #f1f5f9;
+  border-right: 1px solid #f1f5f9;
   vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* Numeric column alignment */
+.th-num,
+.td-num {
+  text-align: right;
 }
 
 .record-row {
@@ -757,29 +724,26 @@ function getShiftKey(shift: string): string {
 }
 
 .record-row:hover {
-  background: #f8fafc;
+  background: #f1f5f9;
 }
 
 .record-row:hover td {
+  background: #f1f5f9;
   border-bottom-color: #e2e8f0;
 }
 
-.col-id { width: 60px; }
-.col-date { width: 110px; }
-.col-shift { width: 90px; }
-.col-bins { width: 100px; }
-.col-time { width: 130px; }
-.col-duration { width: 110px; text-align: right; }
-.col-actions { width: 100px; text-align: center; }
+.record-row:hover .td-sticky--1 {
+  box-shadow: inset 3px 0 0 #3b82f6;
+}
 
 /* Sticky first 3 columns */
-.th-sticky--1 { position: sticky; left: 0; z-index: 3; background: #f8fafc; }
-.th-sticky--2 { position: sticky; left: 120px; z-index: 3; background: #f8fafc; }
-.th-sticky--3 { position: sticky; left: 240px; z-index: 3; background: #f8fafc; }
+.th-sticky--1 { position: sticky; left: 0; z-index: 3; background: #f8fafc; min-width: 120px; }
+.th-sticky--2 { position: sticky; left: 120px; z-index: 3; background: #f8fafc; min-width: 90px; }
+.th-sticky--3 { position: sticky; left: 210px; z-index: 3; background: #f8fafc; box-shadow: 4px 0 8px -2px rgba(0, 0, 0, 0.06); border-right: 1px solid #e2e8f0; min-width: 90px; }
 
-.td-sticky--1 { position: sticky; left: 0; z-index: 2; background: #fff; }
-.td-sticky--2 { position: sticky; left: 120px; z-index: 2; background: #fff; }
-.td-sticky--3 { position: sticky; left: 240px; z-index: 2; background: #fff; }
+.td-sticky--1 { position: sticky; left: 0; z-index: 2; background: #fff; min-width: 120px; }
+.td-sticky--2 { position: sticky; left: 120px; z-index: 2; background: #fff; min-width: 90px; }
+.td-sticky--3 { position: sticky; left: 210px; z-index: 2; background: #fff; box-shadow: 4px 0 8px -2px rgba(0, 0, 0, 0.06); border-right: 1px solid #e2e8f0; min-width: 90px; }
 
 .record-row:hover .td-sticky--1,
 .record-row:hover .td-sticky--2,
@@ -793,16 +757,21 @@ function getShiftKey(shift: string): string {
 }
 
 .clickable-total {
+  display: inline-block;
+  padding: 2px 6px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 4px;
   color: #2563eb;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   text-decoration: none;
-  transition: color 0.12s ease, text-decoration 0.12s ease;
+  transition: background 0.12s ease, color 0.12s ease;
 }
 
 .td-clickable:hover .clickable-total {
+  background: #dbeafe;
   color: #1d4ed8;
-  text-decoration: underline;
 }
 
 .empty-row {
