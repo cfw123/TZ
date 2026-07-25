@@ -12,6 +12,7 @@ const navItems = [
   { name: 'ghwng', path: '/ghwng', label: '干化污泥卸输煤台账' },
   { name: 'rlm', path: '/rlm', label: '燃料煤卸输煤台账' },
   { name: 'drxhdh', path: '/drxhdh', label: '当日消耗台账' },
+  { name: 'record', path: '/record', label: '运行记录查询' },
 ]
 
 function isActive(path) {
