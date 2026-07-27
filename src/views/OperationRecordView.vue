@@ -95,7 +95,19 @@
                   <span v-if="cellErrors['boiler_bins:' + rec.id]" class="cell-error">{{ cellErrors['boiler_bins:' + rec.id] }}</span>
                 </div>
               </td>
-              <td>{{ rec.boiler_time }}</td>
+              <td class="td-time">
+                <div class="cell-input-wrap">
+                  <textarea
+                    :value="rec.boiler_time"
+                    class="cell-input cell-textarea"
+                    :class="{ 'cell-input--error': timeCellErrors['boiler:' + rec.id] }"
+                    @input="onTimeTextareaInput($event, rec, 'boiler')"
+                    placeholder="08:00-18:00"
+                    rows="1"
+                  ></textarea>
+                  <span v-if="timeCellErrors['boiler:' + rec.id]" class="cell-error">{{ timeCellErrors['boiler:' + rec.id] }}</span>
+                </div>
+              </td>
               <td class="td-clickable td-num" @click="openDetail(rec, 'boiler')">
                 <span class="clickable-total">{{ rec.boiler_consumptions?.subtotal || 0 }}</span>
               </td>
@@ -112,7 +124,19 @@
                   <span v-if="gasCellErrors[rec.id]" class="cell-error">{{ gasCellErrors[rec.id] }}</span>
                 </div>
               </td>
-              <td>{{ rec.gasification_time }}</td>
+              <td class="td-time">
+                <div class="cell-input-wrap">
+                  <textarea
+                    :value="rec.gasification_time"
+                    class="cell-input cell-textarea"
+                    :class="{ 'cell-input--error': timeCellErrors['gasification:' + rec.id] }"
+                    @input="onTimeTextareaInput($event, rec, 'gasification')"
+                    placeholder="08:00-18:00"
+                    rows="1"
+                  ></textarea>
+                  <span v-if="timeCellErrors['gasification:' + rec.id]" class="cell-error">{{ timeCellErrors['gasification:' + rec.id] }}</span>
+                </div>
+              </td>
               <td class="td-clickable td-num" @click="openDetail(rec, 'gasification')">
                 <span class="clickable-total">{{ rec.gasification_consumptions?.subtotal || 0 }}</span>
               </td>
@@ -120,7 +144,19 @@
               <td class="td-num">{{ rec.gasification_duration }}</td>
               <td>{{ rec.reason }}</td>
               <td>{{ rec.remarks }}</td>
-              <td>{{ rec.truck_unload_time }}</td>
+              <td class="td-time">
+                <div class="cell-input-wrap">
+                  <textarea
+                    :value="rec.truck_unload_time"
+                    class="cell-input cell-textarea"
+                    :class="{ 'cell-input--error': timeCellErrors['truck:' + rec.id] }"
+                    @input="onTimeTextareaInput($event, rec, 'truck')"
+                    placeholder="09:00-11:00"
+                    rows="1"
+                  ></textarea>
+                  <span v-if="timeCellErrors['truck:' + rec.id]" class="cell-error">{{ timeCellErrors['truck:' + rec.id] }}</span>
+                </div>
+              </td>
               <td class="td-num">{{ rec.truck_unload_duration }}</td>
               <td class="td-num">{{ rec.truck_count }}</td>
             </tr>
@@ -345,11 +381,11 @@ function withMetadata(rec: OperationRecord, idx: number): OperationRecordRow {
     run_group: runGroupSelections[String(rec.id)] ?? ['四班', '一班', '二班', '三班'][idx % 4],
     execution_status: '已执行',
     boiler_bins: '1#ABC',
-    boiler_time: '08:00-18:00',
+    boiler_time: '08:00-10:30',
     boiler_duration: 150,
     gasification_bins: '1#A',
-    gasification_time: '08:00-18:00',
-    gasification_duration: 180,
+    gasification_time: '08:00-10:00',
+    gasification_duration: 120,
     reason: '正常生产',
     remarks: '由消耗台账同步',
     truck_unload_time: '09:00-11:00',
@@ -368,6 +404,32 @@ const runGroupSelections = reactive<Record<string, string>>({})
 const runGroupErrors = reactive<Record<string, string>>({})
 const cellErrors = reactive<Record<string, string>>({})
 const gasCellErrors = reactive<Record<string, string>>({})
+const timeCellErrors = reactive<Record<string, string>>({})
+
+function handleTimeInput(rec: OperationRecordRow, field: 'boiler' | 'gasification' | 'truck', value: string) {
+  const sanitized = value.replace(/[,、]/g, '\n').replace(/[ \t\r]+/g, '')
+  const targets: Record<typeof field, { time: string; duration: string }> = {
+    boiler: { time: 'boiler_time', duration: 'boiler_duration' },
+    gasification: { time: 'gasification_time', duration: 'gasification_duration' },
+    truck: { time: 'truck_unload_time', duration: 'truck_unload_duration' },
+  }
+  const t = targets[field]
+  ;(rec as any)[t.time] = sanitized
+  const key = `${field}:${rec.id}`
+  if (!sanitized) {
+    delete timeCellErrors[key]
+    ;(rec as any)[t.duration] = 0
+    return
+  }
+  const pattern = /^(?:[0-2][0-9]:[0-5][0-9]-[0-2][0-9]:[0-5][0-9])(?:\n(?:[0-2][0-9]:[0-5][0-9]-[0-2][0-9]:[0-5][0-9]))*$/
+  if (!pattern.test(sanitized)) {
+    timeCellErrors[key] = '格式示例:\n08:00-18:00\n19:00-20:00'
+    ;(rec as any)[t.duration] = 0
+    return
+  }
+  delete timeCellErrors[key]
+  ;(rec as any)[t.duration] = calculateDuration(sanitized)
+}
 
 function validateGasBins(rec: OperationRecordRow, value: string) {
   const id = String(rec.id)
@@ -411,6 +473,31 @@ function validateBoilerBins(rec: OperationRecordRow, value: string) {
   } else {
     delete cellErrors[key]
   }
+}
+
+function onTimeTextareaInput(e: Event, rec: OperationRecordRow, field: 'boiler' | 'gasification' | 'truck') {
+  const ta = e.target as HTMLTextAreaElement
+  ta.style.height = 'auto'
+  ta.style.height = `${ta.scrollHeight}px`
+  handleTimeInput(rec, field, ta.value)
+}
+
+function calculateDuration(timeStr: string): number {
+  if (!timeStr) return 0
+  const sanitized = timeStr.replace(/[,、]/g, '\n').replace(/[ \t\r]+/g, '')
+  const periods = sanitized.split('\n').filter(Boolean)
+  let total = 0
+  for (const period of periods) {
+    const [startRaw, endRaw] = period.split('-')
+    if (!startRaw || !endRaw) continue
+    const [sh = 0, sm = 0] = startRaw.split(':').map(Number)
+    const [eh = 0, em = 0] = endRaw.split(':').map(Number)
+    let end = eh * 60 + em
+    const start = sh * 60 + sm
+    if (end < start) end += 24 * 60
+    total += end - start
+  }
+  return total
 }
 
 function loadRunGroupSelections() {
@@ -515,6 +602,9 @@ const filteredRecords = computed<OperationRecordRow[]>(() => {
 filteredRecords.value.forEach(rec => {
   validateGasBins(rec, rec.gasification_bins)
   validateBoilerBins(rec, rec.boiler_bins)
+  handleTimeInput(rec, 'boiler', rec.boiler_time)
+  handleTimeInput(rec, 'gasification', rec.gasification_time)
+  handleTimeInput(rec, 'truck', rec.truck_unload_time)
 })
 
 // ---------------------------------------------------------------------------
@@ -902,6 +992,24 @@ function getShiftKey(shift: string): string {
   flex-direction: column;
   width: fit-content;
   min-width: 0;
+}
+
+.cell-textarea {
+  resize: none;
+  overflow: hidden;
+  min-height: 28px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: inherit;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.td-time {
+  min-width: 150px;
 }
 
 .cell-input {
