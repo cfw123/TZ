@@ -142,8 +142,28 @@
               </td>
               <td class="td-num">{{ rec.gasification_daily_total }}</td>
               <td class="td-num">{{ rec.gasification_duration }}</td>
-              <td>{{ rec.reason }}</td>
-              <td>{{ rec.remarks }}</td>
+              <td class="td-note">
+                <div class="cell-input-wrap">
+                  <textarea
+                    :value="rec.reason"
+                    class="cell-input cell-textarea cell-textarea--note"
+                    @input="onNoteInput(rec, 'reason', ($event.target as HTMLTextAreaElement).value)"
+                    placeholder="原因说明"
+                    rows="1"
+                  ></textarea>
+                </div>
+              </td>
+              <td class="td-note">
+                <div class="cell-input-wrap">
+                  <textarea
+                    :value="rec.remarks"
+                    class="cell-input cell-textarea cell-textarea--note"
+                    @input="onNoteInput(rec, 'remarks', ($event.target as HTMLTextAreaElement).value)"
+                    placeholder="备注"
+                    rows="1"
+                  ></textarea>
+                </div>
+              </td>
               <td class="td-time">
                 <div class="cell-input-wrap">
                   <textarea
@@ -158,7 +178,17 @@
                 </div>
               </td>
               <td class="td-num">{{ rec.truck_unload_duration }}</td>
-              <td class="td-num">{{ rec.truck_count }}</td>
+              <td class="td-num td-count">
+                <div class="cell-input-wrap">
+                  <input
+                    v-model.number="rec.truck_count"
+                    type="number"
+                    class="cell-input cell-input--num"
+                    min="0"
+                    step="1"
+                  />
+                </div>
+              </td>
             </tr>
             <tr v-if="filteredRecords.length === 0">
               <td colspan="20" class="empty-row">暂无匹配数据</td>
@@ -473,6 +503,10 @@ function validateBoilerBins(rec: OperationRecordRow, value: string) {
   } else {
     delete cellErrors[key]
   }
+}
+
+function onNoteInput(rec: OperationRecordRow, field: 'reason' | 'remarks', value: string) {
+  rec[field] = value
 }
 
 function onTimeTextareaInput(e: Event, rec: OperationRecordRow, field: 'boiler' | 'gasification' | 'truck') {
@@ -1010,6 +1044,29 @@ function getShiftKey(shift: string): string {
 
 .td-time {
   min-width: 150px;
+}
+
+.td-count {
+  width: 80px;
+}
+
+.cell-input--num {
+  text-align: right;
+  -moz-appearance: textfield;
+}
+
+.cell-input--num::-webkit-outer-spin-button,
+.cell-input--num::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.td-note {
+  min-width: 160px;
+}
+
+.cell-textarea--note {
+  min-width: 140px;
 }
 
 .cell-input {
