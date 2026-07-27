@@ -65,6 +65,7 @@
                   :colspan="CAT_COLSPANS[cat]"
                 >{{ CAT_LABELS[cat] }}</th>
               </template>
+              <th rowspan="2">操作</th>
             </tr>
             <!-- Tier-2: one <th> per entry in ALL_COLS -->
             <tr class="tr-level-2">
@@ -77,6 +78,7 @@
               >
                 <span class="th-silo-dot" :class="col.disabled ? 'silo-dot--muted' : col.sub === '_A' ? 'silo-dot--a' : 'silo-dot--b'"></span>{{ col.label }}
               </th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -104,6 +106,9 @@
                   @focus="e => (e.target as HTMLInputElement).select()"
                 />
               </td>
+              <td>
+                <button v-if="row.batch !== '总计'" class="btn btn-primary" style="height: 26px; padding: 0 10px; font-size: 12px;" @click="confirmShiftRow(row.batch)">确认</button>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -125,6 +130,7 @@
               <th class="th-fixed-left-2">小计</th>
               <th>A仓原料煤</th>
               <th>B仓原料煤</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
@@ -142,6 +148,9 @@
               </td>
               <td>
                 <input class="cell-input" v-model="row.coal_B" @input="onGasCellInput(row)" @focus="e => (e.target as HTMLInputElement).select()" />
+              </td>
+              <td>
+                <button v-if="row.batch !== '总计'" class="btn btn-primary" style="height: 26px; padding: 0 10px; font-size: 12px;" @click="confirmShiftRow(row.batch)">确认</button>
               </td>
             </tr>
           </tbody>
@@ -166,6 +175,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue'
+import { upsertShiftRecord } from './_shared/shiftRecordStore'
 
 // ---------------------------------------------------------------------------
 // Requirement 1: Fine-grained visibility — 12 independent boolean keys
@@ -489,6 +499,51 @@ function showToast(type: 'success' | 'error' | 'info', message: string) {
   setTimeout(() => {
     toast.visible = false
   }, 3000)
+}
+
+/** Confirm a specific shift row and extract its data as a payload for OperationRecord */
+function confirmShiftRow(batchName: string) {
+  const boilerRow = boilerData.value.find(r => r.batch === batchName)
+  const gasRow = gasData.value.find(r => r.batch === batchName)
+
+  if (!boilerRow || !gasRow) {
+    showToast('error', `未找到班次 ${batchName} 的数据`)
+    return
+  }
+
+  const shiftPayload = {
+    record_date: selectedDate.value,
+    shift_batch: batchName,
+    boiler_consumptions: {
+      subtotal: parseFloat(boilerRow.subtotal) || 0,
+      hl_A: parseFloat(boilerRow.hl_A) || 0,
+      hl_B: parseFloat(boilerRow.hl_B) || 0,
+      jz_A: parseFloat(boilerRow.jz_A) || 0,
+      jz_B: parseFloat(boilerRow.jz_B) || 0,
+      xz_A: parseFloat(boilerRow.xz_A) || 0,
+      xz_B: parseFloat(boilerRow.xz_B) || 0,
+      wn_A: parseFloat(boilerRow.wn_A) || 0,
+      wn_B: parseFloat(boilerRow.wn_B) || 0,
+      yl_A: parseFloat(boilerRow.yl_A) || 0,
+      yl_B: parseFloat(boilerRow.yl_B) || 0,
+      lx_A: parseFloat(boilerRow.lx_A) || 0,
+      lx_B: parseFloat(boilerRow.lx_B) || 0,
+    },
+    gasification_consumptions: {
+      subtotal: parseFloat(gasRow.subtotal) || 0,
+      coal_A: parseFloat(gasRow.coal_A) || 0,
+      coal_B: parseFloat(gasRow.coal_B) || 0,
+    },
+  }
+
+  // Persist to the shared in-memory store so OperationRecordView can read it.
+  // The store is keyed by (record_date, shift_batch), so re-confirming the same
+  // shift overwrites in place (no duplicate rows accumulate in the run-record
+  // report).
+  upsertShiftRecord(shiftPayload)
+
+  console.log('[Confirm Shift] Saved to shiftRecordStore:', JSON.stringify(shiftPayload, null, 2))
+  showToast('success', `${batchName} 数据已确认保存（运行记录报表已同步）`)
 }
 
 // ---------------------------------------------------------------------------

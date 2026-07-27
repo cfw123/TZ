@@ -69,19 +69,46 @@
                   {{ rec.shift_batch }}
                 </span>
               </td>
-              <td class="td-sticky td-sticky--3">{{ rec.run_group }}</td>
-              <td>{{ rec.execution_status }}</td>
-              <td>{{ rec.boiler_bins }}</td>
+              <td class="td-sticky td-sticky--3 run-group-cell">
+                <div class="run-group-control">
+                  <select
+                    v-model="runGroupSelections[rec.id]"
+                    class="run-group-select"
+                    @change="confirmRunGroup(rec)"
+                  >
+                    <option v-for="opt in RUN_GROUP_OPTIONS" :key="opt" :value="opt">{{ opt }}</option>
+                  </select>
+                  <span v-if="runGroupErrors[rec.id]" class="run-group-error">{{ runGroupErrors[rec.id] }}</span>
+                </div>
+              </td>
+              <td>
+                <input
+                  v-model="rec.execution_status"
+                  class="cell-input"
+                  :class="{ 'cell-input--error': cellErrors['execution_status:' + rec.id] }"
+                  @input="validateBinsStatus(rec, 'execution_status', ($event.target as HTMLInputElement).value)"
+                />
+                <span v-if="cellErrors['execution_status:' + rec.id]" class="cell-error">{{ cellErrors['execution_status:' + rec.id] }}</span>
+              </td>
+              <td>
+                <input
+                  v-model="rec.boiler_bins"
+                  class="cell-input"
+                  :class="{ 'cell-input--error': cellErrors['boiler_bins:' + rec.id] }"
+                  @input="validateBinsStatus(rec, 'boiler_bins', ($event.target as HTMLInputElement).value)"
+                />
+                <span v-if="cellErrors['boiler_bins:' + rec.id]" class="cell-error">{{ cellErrors['boiler_bins:' + rec.id] }}</span>
+              </td>
               <td>{{ rec.boiler_time }}</td>
               <td class="td-clickable td-num" @click="openDetail(rec, 'boiler')">
-                <span class="clickable-total">{{ rec.boiler_shift_total }}</span>
+                <span class="clickable-total">{{ rec.boiler_consumptions?.subtotal || 0 }}</span>
               </td>
               <td class="td-num">{{ rec.boiler_daily_total }}</td>
               <td class="td-num">{{ rec.boiler_duration }}</td>
               <td>{{ rec.gasification_bins }}</td>
               <td>{{ rec.gasification_time }}</td>
               <td class="td-clickable td-num" @click="openDetail(rec, 'gasification')">
-                <span class="clickable-total">{{ rec.gasification_shift_total }}</span>
+                <span class="clickable-total">{{ rec.gasification_consumptions?.subtotal || 0 }}</span>
               </td>
               <td class="td-num">{{ rec.gasification_daily_total }}</td>
               <td class="td-num">{{ rec.gasification_duration }}</td>
@@ -130,31 +157,31 @@
                     {{ selectedRecord.boiler_consumptions.subtotal }}
                   </span>
                 </div>
-                <div class="detail-item">
+                <div class="detail-item" v-if="selectedRecord.boiler_consumptions.hl_A">
                   <span class="detail-label">黄陵混合煤 - A仓 (hl_A)</span>
                   <span class="detail-value">{{ selectedRecord.boiler_consumptions.hl_A }}</span>
                 </div>
-                <div class="detail-item">
+                <div class="detail-item" v-if="selectedRecord.boiler_consumptions.hl_B">
                   <span class="detail-label">黄陵混合煤 - B仓 (hl_B)</span>
                   <span class="detail-value">{{ selectedRecord.boiler_consumptions.hl_B }}</span>
                 </div>
-                <div class="detail-item">
+                <div class="detail-item" v-if="selectedRecord.boiler_consumptions.jz_A">
                   <span class="detail-label">建庄大块煤 - A仓 (jz_A)</span>
                   <span class="detail-value">{{ selectedRecord.boiler_consumptions.jz_A }}</span>
                 </div>
-                <div class="detail-item">
+                <div class="detail-item" v-if="selectedRecord.boiler_consumptions.jz_B">
                   <span class="detail-label">建庄大块煤 - B仓 (jz_B)</span>
                   <span class="detail-value">{{ selectedRecord.boiler_consumptions.jz_B }}</span>
                 </div>
-                <div class="detail-item">
+                <div class="detail-item" v-if="selectedRecord.boiler_consumptions.xz_A">
                   <span class="detail-label">细渣煤 - A仓 (xz_A)</span>
                   <span class="detail-value">{{ selectedRecord.boiler_consumptions.xz_A }}</span>
                 </div>
-                <div class="detail-item">
+                <div class="detail-item" v-if="selectedRecord.boiler_consumptions.xz_B">
                   <span class="detail-label">细渣煤 - B仓 (xz_B)</span>
                   <span class="detail-value">{{ selectedRecord.boiler_consumptions.xz_B }}</span>
                 </div>
-                <div class="detail-item detail-item--sludge">
+                <div class="detail-item detail-item--sludge" v-if="selectedRecord.boiler_consumptions.wn_A">
                   <span class="detail-label detail-label--sludge">
                     ⚠ 污泥 - A仓 (wn_A) · 隔离核算
                   </span>
@@ -162,7 +189,7 @@
                     {{ selectedRecord.boiler_consumptions.wn_A }}
                   </span>
                 </div>
-                <div class="detail-item detail-item--sludge">
+                <div class="detail-item detail-item--sludge" v-if="selectedRecord.boiler_consumptions.wn_B">
                   <span class="detail-label detail-label--sludge">
                     ⚠ 污泥 - B仓 (wn_B) · 隔离核算
                   </span>
@@ -170,19 +197,19 @@
                     {{ selectedRecord.boiler_consumptions.wn_B }}
                   </span>
                 </div>
-                <div class="detail-item">
+                <div class="detail-item" v-if="selectedRecord.boiler_consumptions.yl_A">
                   <span class="detail-label">原料煤 - A仓 </span>
                   <span class="detail-value">{{ selectedRecord.boiler_consumptions.yl_A }}</span>
                 </div>
-                <div class="detail-item">
+                <div class="detail-item" v-if="selectedRecord.boiler_consumptions.yl_B">
                   <span class="detail-label">原料煤 - B仓 </span>
                   <span class="detail-value">{{ selectedRecord.boiler_consumptions.yl_B }}</span>
                 </div>
-                <div class="detail-item">
+                <div class="detail-item" v-if="selectedRecord.boiler_consumptions.lx_A">
                   <span class="detail-label">离心煤 - A仓 (lx_A)</span>
                   <span class="detail-value">{{ selectedRecord.boiler_consumptions.lx_A }}</span>
                 </div>
-                <div class="detail-item">
+                <div class="detail-item" v-if="selectedRecord.boiler_consumptions.lx_B">
                   <span class="detail-label">离心煤 - B仓 (lx_B)</span>
                   <span class="detail-value">{{ selectedRecord.boiler_consumptions.lx_B }}</span>
                 </div>
@@ -203,11 +230,11 @@
                     {{ selectedRecord.gasification_consumptions.subtotal }}
                   </span>
                 </div>
-                <div class="detail-item">
+                <div class="detail-item" v-if="selectedRecord.gasification_consumptions.coal_A">
                   <span class="detail-label">A仓原料煤 (coal_A)</span>
                   <span class="detail-value">{{ selectedRecord.gasification_consumptions.coal_A }}</span>
                 </div>
-                <div class="detail-item">
+                <div class="detail-item" v-if="selectedRecord.gasification_consumptions.coal_B">
                   <span class="detail-label">B仓原料煤 (coal_B)</span>
                   <span class="detail-value">{{ selectedRecord.gasification_consumptions.coal_B }}</span>
                 </div>
@@ -222,176 +249,178 @@
         </div>
       </div>
     </Transition>
+
+    <!-- Inline toast for run-group confirmation -->
+    <Transition name="toast-fade">
+      <div v-if="toastMessage" class="run-group-toast">✓ {{ toastMessage }}</div>
+    </Transition>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, reactive, watch } from 'vue'
+import type { OperationRecord, BoilerConsumption, GasificationConsumption } from './_shared/shiftRecordStore'
+import { getOperationRecords, shiftRecordStore } from './_shared/shiftRecordStore'
+
+// Re-export for in-template use so the legacy type names keep working.
+export type { BoilerConsumption, GasificationConsumption }
 
 // ---------------------------------------------------------------------------
-// Type Definitions
+// Demo seed: when the store is empty (first visit, or no shifts confirmed yet),
+// we render a single synthetic row so the table isn't visually empty. The
+// instant the user confirms a real shift in DailyConsumption.vue, the live
+// store takes over and the demo row disappears (or merges into the real data
+// for that date).
 // ---------------------------------------------------------------------------
-interface BoilerConsumption {
-  subtotal: number
-  hl_A: number
-  hl_B: number
-  jz_A: number
-  jz_B: number
-  xz_A: number
-  xz_B: number
-  wn_A: number
-  wn_B: number
-  yl_A: number
-  yl_B: number
-  lx_A: number
-  lx_B: number
+function makeDemoSeed(): OperationRecord[] {
+  const boiler: BoilerConsumption = {
+    subtotal: 1065.5,
+    hl_A: 180, hl_B: 120,
+    jz_A: 140, jz_B: 95,
+    xz_A: 70.5, xz_B: 50,
+    wn_A: 220, wn_B: 180,
+    yl_A: 120, yl_B: 90,
+    lx_A: 160, lx_B: 60,
+  }
+  const gas: GasificationConsumption = { subtotal: 430, coal_A: 220, coal_B: 210 }
+  const seedDate = toLocalDateString(new Date())
+  return [{
+    id: 0,
+    record_date: seedDate,
+    shift_batch: '汇总',
+    boiler_consumptions: boiler,
+    gasification_consumptions: gas,
+    boiler_daily_total: boiler.subtotal,
+    gasification_daily_total: gas.subtotal,
+  }]
 }
 
-interface GasificationConsumption {
-  subtotal: number
-  coal_A: number
-  coal_B: number
-}
-
-interface OperationRecord {
-  id: number
-  record_date: string
-  shift_batch: string
+// ---------------------------------------------------------------------------
+// Metadata fields that live on the run-record report but are NOT derived from
+// the consumption ledger (run-group, equipment state, time windows, etc.).
+// Real-world: these come from an operator's edits on OperationRecordView and
+// get persisted alongside the consumption data. For now they're defaulted.
+// ---------------------------------------------------------------------------
+type OperationRecordRow = OperationRecord & {
   run_group: string
   execution_status: string
   boiler_bins: string
   boiler_time: string
-  boiler_shift_total: number
-  boiler_daily_total: number
   boiler_duration: number
   gasification_bins: string
   gasification_time: string
-  gasification_shift_total: number
-  gasification_daily_total: number
   gasification_duration: number
   reason: string
   remarks: string
   truck_unload_time: string
   truck_unload_duration: number
   truck_count: number
-  boiler_consumptions: BoilerConsumption
-  gasification_consumptions: GasificationConsumption
 }
 
-// ---------------------------------------------------------------------------
-// Mock Data — In production, this would come from a `json-server` REST API.
-// The embedded detail objects simulate the `_embed` query response.
-// ---------------------------------------------------------------------------
-const records = ref<OperationRecord[]>([
-  {
-    id: 1,
-    record_date: '2026-07-25',
-    shift_batch: '白班',
-    run_group: '四班',
+function withMetadata(rec: OperationRecord, idx: number): OperationRecordRow {
+  return {
+    ...rec,
+    run_group: runGroupSelections[String(rec.id)] ?? ['四班', '一班', '二班', '三班'][idx % 4],
     execution_status: '已执行',
     boiler_bins: '1#ABC',
-    boiler_time: '08:00-10:30',
-    boiler_shift_total: 705,
-    boiler_daily_total: 1385,
+    boiler_time: '08:00-18:00',
     boiler_duration: 150,
     gasification_bins: '1#A',
-    gasification_time: '08:00-11:00',
-    gasification_shift_total: 285,
-    gasification_daily_total: 560,
+    gasification_time: '08:00-18:00',
     gasification_duration: 180,
     reason: '正常生产',
-    remarks: '无异常',
+    remarks: '由消耗台账同步',
     truck_unload_time: '09:00-11:00',
     truck_unload_duration: 120,
     truck_count: 3,
-    boiler_consumptions: {
-      subtotal: 705,
-      hl_A: 120.5, hl_B: 85,
-      jz_A: 95, jz_B: 70,
-      xz_A: 45.5, xz_B: 30,
-      wn_A: 150, wn_B: 120,
-      yl_A: 80, yl_B: 60,
-      lx_A: 110, lx_B: 40,
-    },
-    gasification_consumptions: {
-      subtotal: 285,
-      coal_A: 150.5,
-      coal_B: 134.5,
-    },
-  },
-  {
-    id: 2,
-    record_date: '2026-07-25',
-    shift_batch: '小夜班',
-    run_group: '一班',
-    execution_status: '已执行',
-    boiler_bins: '2#BC',
-    boiler_time: '11:00-13:30',
-    boiler_shift_total: 590,
-    boiler_daily_total: 1385,
-    boiler_duration: 150,
-    gasification_bins: '2#B',
-    gasification_time: '11:00-14:00',
-    gasification_shift_total: 200,
-    gasification_daily_total: 560,
-    gasification_duration: 180,
-    reason: '设备检修',
-    remarks: '2#皮带需维护',
-    truck_unload_time: '12:00-13:30',
-    truck_unload_duration: 90,
-    truck_count: 2,
-    boiler_consumptions: {
-      subtotal: 590,
-      hl_A: 100, hl_B: 75,
-      jz_A: 80, jz_B: 65,
-      xz_A: 35, xz_B: 25,
-      wn_A: 130, wn_B: 100,
-      yl_A: 70, yl_B: 55,
-      lx_A: 85, lx_B: 35,
-    },
-    gasification_consumptions: {
-      subtotal: 200,
-      coal_A: 100,
-      coal_B: 100,
-    },
-  },
-  {
-    id: 3,
-    record_date: '2026-07-25',
-    shift_batch: '大夜班',
-    run_group: '二班',
-    execution_status: '已执行',
-    boiler_bins: '1#ABC',
-    boiler_time: '14:00-17:00',
-    boiler_shift_total: 1065.5,
-    boiler_daily_total: 2360.5,
-    boiler_duration: 180,
-    gasification_bins: '1#A',
-    gasification_time: '14:00-18:00',
-    gasification_shift_total: 430,
-    gasification_daily_total: 915,
-    gasification_duration: 240,
-    reason: '满负荷运行',
-    remarks: '加强监控',
-    truck_unload_time: '15:00-17:00',
-    truck_unload_duration: 120,
-    truck_count: 4,
-    boiler_consumptions: {
-      subtotal: 1065.5,
-      hl_A: 180, hl_B: 120,
-      jz_A: 140, jz_B: 95,
-      xz_A: 70.5, xz_B: 50,
-      wn_A: 220, wn_B: 180,
-      yl_A: 120, yl_B: 90,
-      lx_A: 160, lx_B: 60,
-    },
-    gasification_consumptions: {
-      subtotal: 430,
-      coal_A: 220,
-      coal_B: 210,
-    },
-  },
-])
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Run-group selections: limited to 一班 / 二班 / 三班 / 四班, persisted in
+// localStorage so a user-picked team survives navigation and F5.
+// ---------------------------------------------------------------------------
+const RUN_GROUP_OPTIONS = ['一班', '二班', '三班', '四班'] as const
+const RUN_GROUP_STORAGE_KEY = 'tz_run_group_selections_v1'
+const runGroupSelections = reactive<Record<string, string>>({})
+const runGroupErrors = reactive<Record<string, string>>({})
+const cellErrors = reactive<Record<string, string>>({})
+
+function validateBinsStatus(rec: OperationRecordRow, field: 'execution_status' | 'boiler_bins', value: string) {
+  const key = `${field}:${rec.id}`
+  if (!value) {
+    delete cellErrors[key]
+    return
+  }
+  const validTokens = ['无', '1#', '2#', '3#', '4#', 'A', 'B', 'C', 'D', '、']
+  const pattern = /^(?:无|(?:[1-4]#)?[A-D]+)(?:、(?:无|(?:[1-4]#)?[A-D]+))*$/u
+  if (!pattern.test(value) || ![...value].every(c => validTokens.includes(c))) {
+    cellErrors[key] = '格式示例：1#A、2#AB、4#ABC、1#ABC、3#AB'
+  } else {
+    delete cellErrors[key]
+  }
+}
+
+function loadRunGroupSelections() {
+  try {
+    const raw = localStorage.getItem(RUN_GROUP_STORAGE_KEY)
+    if (!raw) return
+    const parsed = JSON.parse(raw) as Record<string, string>
+    for (const [k, v] of Object.entries(parsed)) {
+      if (RUN_GROUP_OPTIONS.includes(v as typeof RUN_GROUP_OPTIONS[number])) {
+        runGroupSelections[k] = v
+      }
+    }
+  } catch (e) {
+    console.warn('[OperationRecordView] failed to hydrate run-group selections:', e)
+  }
+}
+
+function persistRunGroupSelections() {
+  try {
+    localStorage.setItem(RUN_GROUP_STORAGE_KEY, JSON.stringify(runGroupSelections))
+  } catch (e) {
+    console.warn('[OperationRecordView] failed to persist run-group selections:', e)
+  }
+}
+
+watch(runGroupSelections, persistRunGroupSelections, { deep: true })
+loadRunGroupSelections()
+
+function confirmRunGroup(rec: OperationRecordRow) {
+  const id = String(rec.id)
+  const picked = runGroupSelections[id]
+  if (!picked) {
+    alert('请先选择运行班组')
+    return
+  }
+  const duplicate = records.value.find(r =>
+    String(r.id) !== id &&
+    r.record_date === rec.record_date &&
+    r.shift_batch !== rec.shift_batch &&
+    r.run_group === picked
+  )
+  if (duplicate) {
+    runGroupErrors[id] = `${rec.record_date} 已有 ${duplicate.shift_batch} 确认为「${picked}」，各班次班组不可重复`
+    return
+  }
+  delete runGroupErrors[id]
+  rec.run_group = picked
+  persistRunGroupSelections()
+  showToast('success', `${rec.record_date} · ${rec.shift_batch} 运行班组已确认为「${picked}」`)
+}
+
+// Live records: when the store has confirmed shifts, show them; otherwise show
+// the demo seed. Vue's reactivity follows the store's `length` and `deep`
+// fields, so navigating back from DailyConsumption immediately reflects new
+// confirmations.
+const records = computed<OperationRecordRow[]>(() => {
+  const live = getOperationRecords()
+  if (live.length > 0) return live.map(withMetadata)
+  // fallback: demo seed (only when nothing has been confirmed)
+  if (shiftRecordStore.length === 0) return makeDemoSeed().map(withMetadata)
+  return []
+})
 
 // ---------------------------------------------------------------------------
 // Filter State
@@ -414,7 +443,7 @@ const SHIFT_ORDER: Record<string, number> = {
 }
 
 // Apply filter to displayed records (live preview), sorted by shift order
-const filteredRecords = computed<OperationRecord[]>(() => {
+const filteredRecords = computed<OperationRecordRow[]>(() => {
   return records.value
     .filter(rec => {
       const dateMatch = !filterDate.value || rec.record_date === filterDate.value
@@ -434,10 +463,10 @@ const filteredRecords = computed<OperationRecord[]>(() => {
 // Modal State
 // ---------------------------------------------------------------------------
 const showModal = ref(false)
-const selectedRecord = ref<OperationRecord | null>(null)
+const selectedRecord = ref<OperationRecordRow | null>(null)
 const modalType = ref<'boiler' | 'gasification' | null>(null)
 
-function openDetail(rec: OperationRecord, type: 'boiler' | 'gasification') {
+function openDetail(rec: OperationRecordRow, type: 'boiler' | 'gasification') {
   selectedRecord.value = rec
   modalType.value = type
   showModal.value = true
@@ -452,6 +481,17 @@ function closeDetail() {
 // ---------------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------------
+const toastMessage = ref<string>('')
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+function showToast(_type: 'success' | 'error' | 'info', message: string) {
+  toastMessage.value = message
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => {
+    toastMessage.value = ''
+  }, 2500)
+}
+
 function handleSearch() {
   // Filtering is reactive; this button provides UX feedback.
   console.log('[Search] date=', filterDate.value, 'shift=', filterShift.value)
@@ -476,9 +516,9 @@ function handleExport() {
   const rows = filteredRecords.value.map(r => [
     r.record_date, r.shift_batch, r.run_group, r.execution_status,
     r.boiler_bins, r.boiler_time,
-    r.boiler_shift_total, r.boiler_daily_total, r.boiler_duration,
+    r.boiler_consumptions.subtotal, r.boiler_daily_total, r.boiler_duration,
     r.gasification_bins, r.gasification_time,
-    r.gasification_shift_total, r.gasification_daily_total, r.gasification_duration,
+    r.gasification_consumptions.subtotal, r.gasification_daily_total, r.gasification_duration,
     r.reason, r.remarks, r.truck_unload_time, r.truck_unload_duration, r.truck_count,
     r.boiler_consumptions.subtotal,
     r.boiler_consumptions.hl_A, r.boiler_consumptions.hl_B,
@@ -754,6 +794,110 @@ function getShiftKey(shift: string): string {
 /* Clickable shift-total cells */
 .td-clickable {
   cursor: pointer;
+}
+
+/* -------------------------------------------------------------------------
+   Run-group inline editor
+   ------------------------------------------------------------------------- */
+.run-group-cell {
+  padding: 6px 8px !important;
+}
+
+.run-group-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.run-group-error {
+  color: #dc2626;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.run-group-select {
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: #fff;
+  color: #1e293b;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  min-width: 70px;
+  outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.cell-input {
+  field-sizing: content;
+  min-width: 4ch;
+  max-width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  background: #fff;
+  color: #1e293b;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.cell-input:hover {
+  border-color: #cbd5e1;
+}
+
+.cell-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.cell-input--error {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.15);
+}
+
+.cell-error {
+  display: block;
+  color: #dc2626;
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.run-group-select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.run-group-toast {
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 118, 110, 0.95);
+  color: #ecfdf5;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(15, 118, 110, 0.25);
+  z-index: 10000;
+}
+
+.toast-fade-enter-active,
+.toast-fade-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.toast-fade-enter-from,
+.toast-fade-leave-to {
+  opacity: 0;
+  transform: translate(-50%, 8px);
 }
 
 .clickable-total {
