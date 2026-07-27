@@ -78,36 +78,36 @@ export function removeShiftRecord(record_date: string, shift_batch: string): voi
 
 // ---------------------------------------------------------------------------
 // Build one running-record row per confirmed shift. The shift subtotal remains
-// the current shift amount, while daily totals are calculated across all
-// confirmed shifts on the same date.
+// the current shift amount; daily totals are the cumulative sum of this shift
+// plus all preceding shifts on the same date, ordered by SHIFT_ORDER
+// (大夜班 -> 白班 -> 小夜班).
 // ---------------------------------------------------------------------------
 export function getOperationRecords(): OperationRecord[] {
-  const dailyTotals = new Map<string, { boiler: number; gasification: number }>()
-  for (const shift of shiftRecordStore) {
-    const current = dailyTotals.get(shift.record_date) ?? { boiler: 0, gasification: 0 }
-    current.boiler += shift.boiler_consumptions.subtotal || 0
-    current.gasification += shift.gasification_consumptions.subtotal || 0
-    dailyTotals.set(shift.record_date, current)
-  }
+  const sorted = [...shiftRecordStore].sort((a, b) => {
+    const dateCompare = a.record_date.localeCompare(b.record_date)
+    if (dateCompare !== 0) return dateCompare
+    return (SHIFT_ORDER[a.shift_batch] ?? 99) - (SHIFT_ORDER[b.shift_batch] ?? 99)
+  })
 
-  return [...shiftRecordStore]
-    .sort((a, b) => {
-      const dateCompare = a.record_date.localeCompare(b.record_date)
-      if (dateCompare !== 0) return dateCompare
-      return (SHIFT_ORDER[a.shift_batch] ?? 99) - (SHIFT_ORDER[b.shift_batch] ?? 99)
-    })
-    .map((shift) => {
-      const totals = dailyTotals.get(shift.record_date)!
-      return {
-        id: `${shift.record_date}-${shift.shift_batch}`,
-        record_date: shift.record_date,
-        shift_batch: shift.shift_batch,
-        boiler_consumptions: { ...shift.boiler_consumptions },
-        gasification_consumptions: { ...shift.gasification_consumptions },
-        boiler_daily_total: totals.boiler,
-        gasification_daily_total: totals.gasification,
-      }
-    })
+  const runningTotals = new Map<string, { boiler: number; gasification: number }>()
+  return sorted.map((shift) => {
+    const dateKey = shift.record_date
+    const subtotalBoiler = shift.boiler_consumptions.subtotal || 0
+    const subtotalGas = shift.gasification_consumptions.subtotal || 0
+    const running = runningTotals.get(dateKey) ?? { boiler: 0, gasification: 0 }
+    running.boiler += subtotalBoiler
+    running.gasification += subtotalGas
+    runningTotals.set(dateKey, running)
+    return {
+      id: `${shift.record_date}-${shift.shift_batch}`,
+      record_date: shift.record_date,
+      shift_batch: shift.shift_batch,
+      boiler_consumptions: { ...shift.boiler_consumptions },
+      gasification_consumptions: { ...shift.gasification_consumptions },
+      boiler_daily_total: running.boiler,
+      gasification_daily_total: running.gasification,
+    }
+  })
 }
 
 const SHIFT_ORDER: Record<string, number> = {
