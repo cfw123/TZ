@@ -82,22 +82,18 @@
                 </div>
               </td>
               <td>
-                <input
-                  v-model="rec.execution_status"
-                  class="cell-input"
-                  :class="{ 'cell-input--error': cellErrors['execution_status:' + rec.id] }"
-                  @input="validateBinsStatus(rec, 'execution_status', ($event.target as HTMLInputElement).value)"
-                />
-                <span v-if="cellErrors['execution_status:' + rec.id]" class="cell-error">{{ cellErrors['execution_status:' + rec.id] }}</span>
+                <input v-model="rec.execution_status" class="cell-input" />
               </td>
               <td>
-                <input
-                  v-model="rec.boiler_bins"
-                  class="cell-input"
-                  :class="{ 'cell-input--error': cellErrors['boiler_bins:' + rec.id] }"
-                  @input="validateBinsStatus(rec, 'boiler_bins', ($event.target as HTMLInputElement).value)"
-                />
-                <span v-if="cellErrors['boiler_bins:' + rec.id]" class="cell-error">{{ cellErrors['boiler_bins:' + rec.id] }}</span>
+                <div class="cell-input-wrap">
+                  <input
+                    v-model="rec.boiler_bins"
+                    class="cell-input"
+                    :class="{ 'cell-input--error': cellErrors['boiler_bins:' + rec.id] }"
+                    @input="validateBoilerBins(rec, ($event.target as HTMLInputElement).value)"
+                  />
+                  <span v-if="cellErrors['boiler_bins:' + rec.id]" class="cell-error">{{ cellErrors['boiler_bins:' + rec.id] }}</span>
+                </div>
               </td>
               <td>{{ rec.boiler_time }}</td>
               <td class="td-clickable td-num" @click="openDetail(rec, 'boiler')">
@@ -105,7 +101,17 @@
               </td>
               <td class="td-num">{{ rec.boiler_daily_total }}</td>
               <td class="td-num">{{ rec.boiler_duration }}</td>
-              <td>{{ rec.gasification_bins }}</td>
+              <td>
+                <div class="cell-input-wrap">
+                  <input
+                    v-model="rec.gasification_bins"
+                    class="cell-input"
+                    :class="{ 'cell-input--error': gasCellErrors[rec.id] }"
+                    @input="validateGasBins(rec, ($event.target as HTMLInputElement).value)"
+                  />
+                  <span v-if="gasCellErrors[rec.id]" class="cell-error">{{ gasCellErrors[rec.id] }}</span>
+                </div>
+              </td>
               <td>{{ rec.gasification_time }}</td>
               <td class="td-clickable td-num" @click="openDetail(rec, 'gasification')">
                 <span class="clickable-total">{{ rec.gasification_consumptions?.subtotal || 0 }}</span>
@@ -223,6 +229,22 @@
                 <span class="section-icon">💨</span>
                 <span>气化消耗明细</span>
               </div>
+              <div class="bins-edit-row">
+                <div class="bins-edit-cell">
+                  <span class="bins-edit-label">气化运行筒仓</span>
+                  <input
+                    v-model="selectedRecord!.gasification_bins"
+                    class="cell-input"
+                    :class="{ 'cell-input--error': selectedRecord && gasCellErrors[String(selectedRecord.id)], 'cell-input--success': selectedRecord && !gasCellErrors[String(selectedRecord.id)] && selectedRecord.gasification_bins }"
+                    @input="selectedRecord && validateGasBins(selectedRecord, ($event.target as HTMLInputElement).value)"
+                  />
+                  <span v-if="selectedRecord && gasCellErrors[String(selectedRecord.id)]" class="cell-error">{{ gasCellErrors[String(selectedRecord.id)] }}</span>
+                </div>
+                <div class="bins-edit-cell">
+                  <span class="bins-edit-label">气化上煤时间</span>
+                  <input v-model="selectedRecord!.gasification_time" class="cell-input" />
+                </div>
+              </div>
               <div class="detail-grid" v-if="selectedRecord.gasification_consumptions">
                 <div class="detail-item detail-item--highlight">
                   <span class="detail-label">小计</span>
@@ -258,7 +280,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, watch } from 'vue'
+import { ref, computed, reactive, watch, onMounted, onUnmounted } from 'vue'
 import type { OperationRecord, BoilerConsumption, GasificationConsumption } from './_shared/shiftRecordStore'
 import { getOperationRecords, shiftRecordStore } from './_shared/shiftRecordStore'
 
@@ -345,16 +367,46 @@ const RUN_GROUP_STORAGE_KEY = 'tz_run_group_selections_v1'
 const runGroupSelections = reactive<Record<string, string>>({})
 const runGroupErrors = reactive<Record<string, string>>({})
 const cellErrors = reactive<Record<string, string>>({})
+const gasCellErrors = reactive<Record<string, string>>({})
 
-function validateBinsStatus(rec: OperationRecordRow, field: 'execution_status' | 'boiler_bins', value: string) {
-  const key = `${field}:${rec.id}`
+function validateGasBins(rec: OperationRecordRow, value: string) {
+  const id = String(rec.id)
+  if (!value) {
+    delete gasCellErrors[id]
+    return
+  }
+  const sanitized = value.replace(/,/g, '、').replace(/\s+/g, '')
+  rec.gasification_bins = sanitized
+  if (sanitized === '无') {
+    delete gasCellErrors[id]
+    return
+  }
+  const invalidChars = [...sanitized].filter(c => !/[0-9#、]/.test(c))
+  if (invalidChars.length > 0) {
+    gasCellErrors[id] = `非法字符：${[...new Set(invalidChars)].join(' ')}，仅允许 1# 2# 3# 4# 5# 6#`
+    return
+  }
+  const pattern = /^(?:[1-6]#)(?:、(?:[1-6]#))*$/u
+  if (!pattern.test(sanitized)) {
+    gasCellErrors[id] = '格式示例：1#、2#、5#'
+    return
+  }
+  const bins = sanitized.split('、')
+  if (new Set(bins).size !== bins.length) {
+    gasCellErrors[id] = '筒仓不能重复录入'
+    return
+  }
+  delete gasCellErrors[id]
+}
+
+function validateBoilerBins(rec: OperationRecordRow, value: string) {
+  const key = `boiler_bins:${rec.id}`
   if (!value) {
     delete cellErrors[key]
     return
   }
-  const validTokens = ['无', '1#', '2#', '3#', '4#', 'A', 'B', 'C', 'D', '、']
   const pattern = /^(?:无|(?:[1-4]#)?[A-D]+)(?:、(?:无|(?:[1-4]#)?[A-D]+))*$/u
-  if (!pattern.test(value) || ![...value].every(c => validTokens.includes(c))) {
+  if (!pattern.test(value)) {
     cellErrors[key] = '格式示例：1#A、2#AB、4#ABC、1#ABC、3#AB'
   } else {
     delete cellErrors[key]
@@ -459,6 +511,12 @@ const filteredRecords = computed<OperationRecordRow[]>(() => {
     })
 })
 
+// Initialize validation for all loaded records
+filteredRecords.value.forEach(rec => {
+  validateGasBins(rec, rec.gasification_bins)
+  validateBoilerBins(rec, rec.boiler_bins)
+})
+
 // ---------------------------------------------------------------------------
 // Modal State
 // ---------------------------------------------------------------------------
@@ -477,6 +535,12 @@ function closeDetail() {
   selectedRecord.value = null
   modalType.value = null
 }
+
+function onModalKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && showModal.value) closeDetail()
+}
+onMounted(() => document.addEventListener('keydown', onModalKeydown))
+onUnmounted(() => document.removeEventListener('keydown', onModalKeydown))
 
 // ---------------------------------------------------------------------------
 // Actions
@@ -724,6 +788,7 @@ function getShiftKey(shift: string): string {
   width: max-content;
   min-width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
   font-size: 13px;
   color: #1f2937;
 }
@@ -832,6 +897,13 @@ function getShiftKey(shift: string): string {
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
+.cell-input-wrap {
+  display: flex;
+  flex-direction: column;
+  width: fit-content;
+  min-width: 0;
+}
+
 .cell-input {
   field-sizing: content;
   min-width: 4ch;
@@ -861,12 +933,44 @@ function getShiftKey(shift: string): string {
   box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.15);
 }
 
+.cell-input--success {
+  border-color: #16a34a;
+  box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.15);
+}
+
 .cell-error {
   display: block;
   color: #dc2626;
   font-size: 11px;
   font-weight: 600;
   margin-top: 2px;
+  width: 100%;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+.bins-edit-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.bins-edit-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 160px;
+  flex: 1;
+}
+
+.bins-edit-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
 }
 
 .run-group-select:focus {
@@ -948,8 +1052,8 @@ function getShiftKey(shift: string): string {
 }
 
 .shift-badge--evening {
-  background: #e0e7ff;
-  color: #3730a3;
+  background: #7c3aed;
+  color: #ffffff;
 }
 
 .shift-badge--other {
@@ -991,16 +1095,20 @@ function getShiftKey(shift: string): string {
   padding: 18px 24px;
   border-bottom: 1px solid #e2e8f0;
   background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
 .modal-title-group {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
 }
 
 .modal-icon {
   font-size: 22px;
+  flex-shrink: 0;
 }
 
 .modal-title {
@@ -1008,6 +1116,10 @@ function getShiftKey(shift: string): string {
   font-size: 17px;
   font-weight: 700;
   color: #1e3a5f;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .modal-subtitle {
@@ -1038,6 +1150,24 @@ function getShiftKey(shift: string): string {
   padding: 20px 24px;
   overflow-y: auto;
   flex: 1;
+  min-height: 0;
+  overscroll-behavior: contain;
+}
+
+/* Modal body scrollbar */
+.modal-body::-webkit-scrollbar {
+  width: 6px;
+}
+.modal-body::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+.modal-body::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+.modal-body::-webkit-scrollbar-thumb:hover {
+  background: #94a8be;
 }
 
 .modal-footer {
@@ -1185,6 +1315,17 @@ function getShiftKey(shift: string): string {
   .toolbar-filters {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .modal-overlay {
+    padding: 12px;
+    align-items: flex-end;
+  }
+
+  .modal-container {
+    max-height: 90vh;
+    border-radius: 10px 10px 0 0;
+    max-width: 100%;
   }
 
   .detail-grid {
