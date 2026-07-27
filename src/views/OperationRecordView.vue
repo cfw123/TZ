@@ -42,9 +42,11 @@
               <th>错峰运行<br>执行情况</th>
               <th>锅炉运行筒仓</th>
               <th>锅炉上煤时间</th>
+              <th class="th-num">锅炉掺烧细渣量<br>(铲)</th>
               <th class="th-num">锅炉当班上煤量<br>(吨)</th>
               <th class="th-num">锅炉当日上煤量<br>(吨)</th>
               <th class="th-num">锅炉上煤时长<br>(分)</th>
+              <th>掺烧煤种及比例</th>
               <th>气化运行筒仓</th>
               <th>气化上煤时间</th>
               <th class="th-num">气化当班上煤量<br>(吨)</th>
@@ -102,10 +104,21 @@
                     class="cell-input cell-textarea"
                     :class="{ 'cell-input--error': timeCellErrors['boiler:' + rec.id] }"
                     @input="onTimeTextareaInput($event, rec, 'boiler')"
-                    placeholder="08:00-18:00"
+                    placeholder="08:00~18:00"
                     rows="1"
                   ></textarea>
                   <span v-if="timeCellErrors['boiler:' + rec.id]" class="cell-error">{{ timeCellErrors['boiler:' + rec.id] }}</span>
+                </div>
+              </td>
+              <td class="td-num td-count">
+                <div class="cell-input-wrap">
+                  <input
+                    v-model.number="rec.boiler_blend_xz"
+                    type="number"
+                    class="cell-input cell-input--num"
+                    min="0"
+                    step="1"
+                  />
                 </div>
               </td>
               <td class="td-clickable td-num" @click="openDetail(rec, 'boiler')">
@@ -113,6 +126,15 @@
               </td>
               <td class="td-num">{{ rec.boiler_daily_total }}</td>
               <td class="td-num">{{ rec.boiler_duration }}</td>
+              <td class="td-note">
+                <div class="cell-input-wrap">
+                  <input
+                    v-model="rec.blend_mix"
+                    class="cell-input"
+                    placeholder="如：烟煤50%/焦煤30%/无烟煤20%"
+                  />
+                </div>
+              </td>
               <td>
                 <div class="cell-input-wrap">
                   <input
@@ -131,7 +153,7 @@
                     class="cell-input cell-textarea"
                     :class="{ 'cell-input--error': timeCellErrors['gasification:' + rec.id] }"
                     @input="onTimeTextareaInput($event, rec, 'gasification')"
-                    placeholder="08:00-18:00"
+                    placeholder="08:00~18:00"
                     rows="1"
                   ></textarea>
                   <span v-if="timeCellErrors['gasification:' + rec.id]" class="cell-error">{{ timeCellErrors['gasification:' + rec.id] }}</span>
@@ -171,7 +193,7 @@
                     class="cell-input cell-textarea"
                     :class="{ 'cell-input--error': timeCellErrors['truck:' + rec.id] }"
                     @input="onTimeTextareaInput($event, rec, 'truck')"
-                    placeholder="09:00-11:00"
+                    placeholder="09:00~11:00"
                     rows="1"
                   ></textarea>
                   <span v-if="timeCellErrors['truck:' + rec.id]" class="cell-error">{{ timeCellErrors['truck:' + rec.id] }}</span>
@@ -191,7 +213,7 @@
               </td>
             </tr>
             <tr v-if="filteredRecords.length === 0">
-              <td colspan="20" class="empty-row">暂无匹配数据</td>
+              <td colspan="21" class="empty-row">暂无匹配数据</td>
             </tr>
           </tbody>
         </table>
@@ -395,6 +417,8 @@ type OperationRecordRow = OperationRecord & {
   boiler_bins: string
   boiler_time: string
   boiler_duration: number
+  boiler_blend_xz: number
+  blend_mix: string
   gasification_bins: string
   gasification_time: string
   gasification_duration: number
@@ -411,8 +435,10 @@ function withMetadata(rec: OperationRecord, idx: number): OperationRecordRow {
     run_group: runGroupSelections[String(rec.id)] ?? ['四班', '一班', '二班', '三班'][idx % 4],
     execution_status: '已执行',
     boiler_bins: '1#ABC',
-    boiler_time: '08:00-10:30',
+    boiler_time: '08:00~10:30',
     boiler_duration: 150,
+    boiler_blend_xz: 0,
+    blend_mix: '烟煤60% / 焦煤40%',
     gasification_bins: '1#A',
     gasification_time: '08:00-10:00',
     gasification_duration: 120,
@@ -437,7 +463,7 @@ const gasCellErrors = reactive<Record<string, string>>({})
 const timeCellErrors = reactive<Record<string, string>>({})
 
 function handleTimeInput(rec: OperationRecordRow, field: 'boiler' | 'gasification' | 'truck', value: string) {
-  const sanitized = value.replace(/[,、]/g, '\n').replace(/[ \t\r]+/g, '')
+  const sanitized = value.replace(/[,、]/g, '\n').replace(/~/g, '-').replace(/[ \t\r]+/g, '\n')
   const targets: Record<typeof field, { time: string; duration: string }> = {
     boiler: { time: 'boiler_time', duration: 'boiler_duration' },
     gasification: { time: 'gasification_time', duration: 'gasification_duration' },
@@ -451,9 +477,9 @@ function handleTimeInput(rec: OperationRecordRow, field: 'boiler' | 'gasificatio
     ;(rec as any)[t.duration] = 0
     return
   }
-  const pattern = /^(?:[0-2][0-9]:[0-5][0-9]-[0-2][0-9]:[0-5][0-9])(?:\n(?:[0-2][0-9]:[0-5][0-9]-[0-2][0-9]:[0-5][0-9]))*$/
+  const pattern = /^(?:[0-2]?[0-9]:[0-5][0-9]-[0-2]?[0-9]:[0-5][0-9])(?:\n(?:[0-2]?[0-9]:[0-5][0-9]-[0-2]?[0-9]:[0-5][0-9]))*$/
   if (!pattern.test(sanitized)) {
-    timeCellErrors[key] = '格式示例:\n08:00-18:00\n19:00-20:00'
+    timeCellErrors[key] = '格式示例:\n08:00~18:00\n19:00~20:00'
     ;(rec as any)[t.duration] = 0
     return
   }
@@ -575,10 +601,24 @@ function confirmRunGroup(rec: OperationRecordRow) {
   )
   if (duplicate) {
     runGroupErrors[id] = `${rec.record_date} 已有 ${duplicate.shift_batch} 确认为「${picked}」，各班次班组不可重复`
+    runGroupSelections[id] = rec.run_group
     return
   }
   delete runGroupErrors[id]
   rec.run_group = picked
+  for (const other of records.value) {
+    const oid = String(other.id)
+    if (oid === id || other.record_date !== rec.record_date) continue
+    const stillDup = records.value.some(r =>
+      String(r.id) !== oid &&
+      r.record_date === other.record_date &&
+      r.shift_batch !== other.shift_batch &&
+      r.run_group === other.run_group &&
+      r.run_group !== ''
+    )
+    if (stillDup) continue
+    delete runGroupErrors[oid]
+  }
   persistRunGroupSelections()
   showToast('success', `${rec.record_date} · ${rec.shift_batch} 运行班组已确认为「${picked}」`)
 }
@@ -692,8 +732,9 @@ function handleExport() {
   }
   const headers = [
     '日期', '班次', '运行班组', '错峰运行执行情况',
-    '锅炉运行筒仓', '锅炉上煤时间',
+    '锅炉运行筒仓', '锅炉上煤时间', '锅炉掺烧细渣量(铲)',
     '锅炉当班上煤量(吨)', '锅炉当日上煤量(吨)', '锅炉上煤时长(分)',
+    '掺烧煤种及比例',
     '气化运行筒仓', '气化上煤时间',
     '气化当班上煤量(吨)', '气化当日上煤量(吨)', '气化上煤时长(分)',
     '原因说明', '备注', '汽车卸车时间', '汽车卸车时长(分)', '汽车卸车数量(辆)',
@@ -703,8 +744,9 @@ function handleExport() {
   ]
   const rows = filteredRecords.value.map(r => [
     r.record_date, r.shift_batch, r.run_group, r.execution_status,
-    r.boiler_bins, r.boiler_time,
+    r.boiler_bins, r.boiler_time, r.boiler_blend_xz,
     r.boiler_consumptions.subtotal, r.boiler_daily_total, r.boiler_duration,
+    r.blend_mix,
     r.gasification_bins, r.gasification_time,
     r.gasification_consumptions.subtotal, r.gasification_daily_total, r.gasification_duration,
     r.reason, r.remarks, r.truck_unload_time, r.truck_unload_duration, r.truck_count,
