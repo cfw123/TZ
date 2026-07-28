@@ -6,8 +6,8 @@
     <div class="toolbar">
       <div class="toolbar-filters">
         <div class="filter-group">
-          <label class="filter-label">月份</label>
-          <input type="month" v-model="filterMonth" class="filter-input" />
+          <label class="filter-label">日期</label>
+          <input type="date" v-model="filterDate" class="filter-input" />
         </div>
 
         <div class="filter-group">
@@ -42,7 +42,9 @@
         <table class="record-table">
           <thead>
             <tr>
-              <th class="th-sticky th-sticky--1">日期</th>
+              <th class="th-sticky th-sticky--1 sortable-th" @click="dateSortAsc = !dateSortAsc">
+                日期 <span class="sort-icon">{{ dateSortAsc ? '▲' : '▼' }}</span>
+              </th>
               <th class="th-sticky th-sticky--2">班次</th>
               <th class="th-sticky th-sticky--3">运行班组</th>
               <th>错峰运行<br>执行情况</th>
@@ -696,12 +698,6 @@ const records = computed<OperationRecordRow[]>(() => {
 // ---------------------------------------------------------------------------
 // Filter State
 // ---------------------------------------------------------------------------
-function toLocalMonthString(date: Date): string {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  return `${y}-${m}`
-}
-
 function toLocalDateString(date: Date): string {
   const y = date.getFullYear()
   const m = String(date.getMonth() + 1).padStart(2, '0')
@@ -709,7 +705,8 @@ function toLocalDateString(date: Date): string {
   return `${y}-${m}-${d}`
 }
 
-const filterMonth = ref<string>(toLocalMonthString(new Date()))
+const dateSortAsc = ref(true)
+const filterDate = ref<string>('')
 const filterShift = ref<string>('')
 const PAGE_SIZE = 50
 const currentPage = ref(1)
@@ -726,12 +723,12 @@ const filteredRecords = computed<OperationRecordRow[]>(() => {
   currentPage.value = 1
   return records.value
     .filter(rec => {
-      const monthMatch = !filterMonth.value || rec.record_date.startsWith(filterMonth.value)
+      const dateMatch = !filterDate.value || rec.record_date === filterDate.value
       const shiftMatch = !filterShift.value || rec.shift_batch === filterShift.value
-      return monthMatch && shiftMatch
+      return dateMatch && shiftMatch
     })
     .sort((a, b) => {
-      const dateCompare = a.record_date.localeCompare(b.record_date)
+      const dateCompare = a.record_date.localeCompare(b.record_date) * (dateSortAsc.value ? 1 : -1)
       if (dateCompare !== 0) return dateCompare
       const shiftA = SHIFT_ORDER[a.shift_batch] ?? 99
       const shiftB = SHIFT_ORDER[b.shift_batch] ?? 99
