@@ -2,21 +2,13 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 import path from 'path'
+import dbJsonApiPlugin from './db-json-api-plugin.js'
 
 export default defineConfig({
-  plugins: [vue(), vueDevTools()],
+  plugins: [vue(), vueDevTools(), dbJsonApiPlugin()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-    },
-  },
-  server: {
-    proxy: {
-      '/api': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
-        rewrite: (p) => p.replace(/^\/api/, ''),
-      },
     },
   },
 })

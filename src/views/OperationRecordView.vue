@@ -7,7 +7,16 @@
       <div class="toolbar-filters">
         <div class="filter-group">
           <label class="filter-label">日期</label>
-          <input type="date" v-model="filterDate" class="filter-input" />
+          <input v-model="filterDate" class="filter-input" v-bind="dateInputAttrs" />
+        </div>
+
+        <div class="filter-group">
+          <label class="filter-label">粒度</label>
+          <select v-model="filterGranularity" class="filter-input">
+            <option value="day">按日</option>
+            <option value="month">按月</option>
+            <option value="year">按年</option>
+          </select>
         </div>
 
         <div class="filter-group">
@@ -29,7 +38,7 @@
     <div class="section-block">
       <div class="section-header">
         <span class="section-title">运行记录列表</span>
-        <span class="section-meta">共 {{ pagedRecords.length }} 条 / {{ filteredRecords.length }} 条</span>
+        <span class="section-meta">{{ currentPage }} / {{ totalPages }} 页 · 共 {{ filteredRecords.length }} 条</span>
       </div>
 
       <div class="pagination" v-if="totalPages > 1">
@@ -65,6 +74,7 @@
               <th>汽车卸车时间</th>
               <th class="th-num">汽车卸车时长<br>(分)</th>
               <th class="th-num">汽车卸车数量<br>(辆)</th>
+              <th class="th-sticky-right">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -72,6 +82,7 @@
               v-for="rec in pagedRecords"
               :key="rec.id"
               class="record-row"
+              :class="{ 'record-row--saved': isSaved(rec.id) }"
             >
               <td class="td-sticky td-sticky--1">{{ rec.record_date }}</td>
               <td class="td-sticky td-sticky--2">
@@ -224,9 +235,29 @@
                   />
                 </div>
               </td>
+              <td class="td-action td-sticky-right">
+                <template v-if="isSaved(rec.id)">
+                  <button
+                    class="btn btn-secondary btn-sm"
+                    :disabled="savingIds.has(String(rec.id))"
+                    @click="updateRecord(rec)"
+                  >
+                    {{ savingIds.has(String(rec.id)) ? '修改中…' : '修改' }}
+                  </button>
+                </template>
+                <template v-else>
+                  <button
+                    class="btn btn-primary btn-sm"
+                    :disabled="savingIds.has(String(rec.id))"
+                    @click="saveRecord(rec)"
+                  >
+                    {{ savingIds.has(String(rec.id)) ? '保存中…' : '保存' }}
+                  </button>
+                </template>
+              </td>
             </tr>
             <tr v-if="filteredRecords.length === 0">
-              <td colspan="21" class="empty-row">暂无匹配数据</td>
+              <td :colspan="22" class="empty-row">暂无匹配数据</td>
             </tr>
           </tbody>
         </table>
@@ -384,6 +415,7 @@
 import { ref, computed, reactive, watch, onMounted, onUnmounted } from 'vue'
 import type { OperationRecord, BoilerConsumption, GasificationConsumption } from './_shared/shiftRecordStore'
 import { getOperationRecords, shiftRecordStore } from './_shared/shiftRecordStore'
+import api from '../api'
 
 // Re-export for in-template use so the legacy type names keep working.
 export type { BoilerConsumption, GasificationConsumption }
@@ -707,6 +739,12 @@ function toLocalDateString(date: Date): string {
 
 const dateSortAsc = ref(true)
 const filterDate = ref<string>('')
+const filterGranularity = ref<'day' | 'month' | 'year'>('month')
+const dateInputAttrs = computed(() => {
+  if (filterGranularity.value === 'day') return { type: 'date', placeholder: '年-月-日' }
+  if (filterGranularity.value === 'month') return { type: 'month', placeholder: '年-月' }
+  return { type: 'number', placeholder: '年', min: '2020', max: '2099' }
+})
 const filterShift = ref<string>('')
 const PAGE_SIZE = 50
 const currentPage = ref(1)
@@ -723,9 +761,17 @@ const filteredRecords = computed<OperationRecordRow[]>(() => {
   currentPage.value = 1
   return records.value
     .filter(rec => {
-      const dateMatch = !filterDate.value || rec.record_date === filterDate.value
-      const shiftMatch = !filterShift.value || rec.shift_batch === filterShift.value
-      return dateMatch && shiftMatch
+      if (!filterDate.value) return true
+      const d = rec.record_date
+      if (filterGranularity.value === 'day') return d === filterDate.value
+      if (filterGranularity.value === 'month') {
+        const prefix = d.slice(0, 7)
+        return prefix === filterDate.value.slice(0, prefix.length)
+      }
+      return d.slice(0, 4) === filterDate.value.slice(0, 4)
+    })
+    .filter(rec => {
+      return !filterShift.value || rec.shift_batch === filterShift.value
     })
     .sort((a, b) => {
       const dateCompare = a.record_date.localeCompare(b.record_date) * (dateSortAsc.value ? 1 : -1)
@@ -773,7 +819,10 @@ function closeDetail() {
 function onModalKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape' && showModal.value) closeDetail()
 }
-onMounted(() => document.addEventListener('keydown', onModalKeydown))
+onMounted(() => {
+  document.addEventListener('keydown', onModalKeydown)
+  loadSavedIds()
+})
 onUnmounted(() => document.removeEventListener('keydown', onModalKeydown))
 
 // ---------------------------------------------------------------------------
@@ -788,6 +837,115 @@ function showToast(_type: 'success' | 'error' | 'info', message: string) {
   toastTimer = setTimeout(() => {
     toastMessage.value = ''
   }, 2500)
+}
+
+const savingIds = reactive<Set<string>>(new Set())
+const savedIds = reactive<Set<string>>(new Set())
+const savedDbIdMap = reactive<Map<string, string>>(new Map()) // localId -> db.id
+
+async function loadSavedIds() {
+  try {
+    const rows: any[] = await api.list('operation_record')
+    rows.forEach(row => {
+      const localId = `${row.recordDate}-${row.shiftBatch}`
+      savedIds.add(localId)
+      savedDbIdMap.set(localId, String(row.id))
+    })
+  } catch { /* ignore */ }
+}
+
+function isSaved(id: string | number) {
+  return savedIds.has(String(id))
+}
+
+async function saveRecord(rec: OperationRecordRow) {
+  if (savingIds.has(String(rec.id))) return
+  const err = runGroupErrors[rec.id]
+    || cellErrors['boiler_bins:' + rec.id]
+    || gasCellErrors[rec.id]
+    || timeCellErrors['boiler:' + rec.id]
+    || timeCellErrors['gasification:' + rec.id]
+    || timeCellErrors['truck:' + rec.id]
+  if (err) {
+    showToast('error', `请先修正红色报错再保存：${err}`)
+    return
+  }
+  savingIds.add(String(rec.id))
+  try {
+    const payload = {
+      recordDate: rec.record_date,
+      shiftBatch: rec.shift_batch,
+      runGroup: rec.run_group || null,
+      executionStatus: rec.execution_status || null,
+      boilerBins: rec.boiler_bins || null,
+      boilerTime: rec.boiler_time || null,
+      boilerDuration: rec.boiler_duration || null,
+      boilerBlendXz: rec.boiler_blend_xz || null,
+      boilerShiftTotal: rec.boiler_consumptions?.subtotal || null,
+      boilerDayTotal: rec.boiler_daily_total || null,
+      blendMix: rec.blend_mix || null,
+      gasificationBins: rec.gasification_bins || null,
+      gasificationTime: rec.gasification_time || null,
+      gasificationDuration: rec.gasification_duration || null,
+      gasificationShiftTotal: rec.gasification_consumptions?.subtotal || null,
+      gasificationDayTotal: rec.gasification_daily_total || null,
+      reason: rec.reason || null,
+      remarks: rec.remarks || null,
+      truckUnloadTime: rec.truck_unload_time || null,
+      truckUnloadDuration: rec.truck_unload_duration || null,
+      truckCount: rec.truck_count || null,
+    }
+    const result: any = await api.create('operation_record', payload)
+    const localId = String(rec.id)
+    savedIds.add(localId)
+    if (result?.id) savedDbIdMap.set(localId, String(result.id))
+    showToast('success', `${rec.record_date} · ${rec.shift_batch} 已保存到数据库`)
+  } catch (e) {
+    showToast('error', `保存失败: ${e instanceof Error ? e.message : e}`)
+  } finally {
+    savingIds.delete(String(rec.id))
+  }
+}
+
+async function updateRecord(rec: OperationRecordRow) {
+  if (savingIds.has(String(rec.id))) return
+  const dbId = savedDbIdMap.get(String(rec.id))
+  if (!dbId) {
+    showToast('error', '未找到已保存记录，无法修改')
+    return
+  }
+  savingIds.add(String(rec.id))
+  try {
+    const payload = {
+      recordDate: rec.record_date,
+      shiftBatch: rec.shift_batch,
+      runGroup: rec.run_group || null,
+      executionStatus: rec.execution_status || null,
+      boilerBins: rec.boiler_bins || null,
+      boilerTime: rec.boiler_time || null,
+      boilerDuration: rec.boiler_duration || null,
+      boilerBlendXz: rec.boiler_blend_xz || null,
+      boilerShiftTotal: rec.boiler_consumptions?.subtotal || null,
+      boilerDayTotal: rec.boiler_daily_total || null,
+      blendMix: rec.blend_mix || null,
+      gasificationBins: rec.gasification_bins || null,
+      gasificationTime: rec.gasification_time || null,
+      gasificationDuration: rec.gasification_duration || null,
+      gasificationShiftTotal: rec.gasification_consumptions?.subtotal || null,
+      gasificationDayTotal: rec.gasification_daily_total || null,
+      reason: rec.reason || null,
+      remarks: rec.remarks || null,
+      truckUnloadTime: rec.truck_unload_time || null,
+      truckUnloadDuration: rec.truck_unload_duration || null,
+      truckCount: rec.truck_count || null,
+    }
+    await api.patch('operation_record', dbId, payload)
+    showToast('success', `${rec.record_date} · ${rec.shift_batch} 已更新`)
+  } catch (e) {
+    showToast('error', `修改失败: ${e instanceof Error ? e.message : e}`)
+  } finally {
+    savingIds.delete(String(rec.id))
+  }
 }
 
 function handleSearch() {
@@ -952,6 +1110,19 @@ function getShiftKey(shift: string): string {
   border-color: #94a3b8;
 }
 
+.btn-sm {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.td-action {
+  text-align: center;
+  vertical-align: middle;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
 .btn-link {
   background: transparent;
   border: none;
@@ -1077,10 +1248,35 @@ function getShiftKey(shift: string): string {
   box-shadow: inset 3px 0 0 #3b82f6;
 }
 
+/* Saved row highlight */
+.record-row--saved {
+  background: #f0fdf4;
+}
+.record-row--saved:hover {
+  background: #dcfce7;
+}
+.record-row--saved td {
+  background: inherit;
+}
+.record-row--saved .td-sticky--1,
+.record-row--saved .td-sticky--2,
+.record-row--saved .td-sticky--3 {
+  background: #f0fdf4;
+}
+.record-row--saved:hover .td-sticky--1,
+.record-row--saved:hover .td-sticky--2,
+.record-row--saved:hover .td-sticky--3 {
+  background: #dcfce7;
+}
+.record-row--saved .td-sticky--1 {
+  box-shadow: inset 3px 0 0 #16a34a;
+}
+
 /* Sticky first 3 columns */
 .th-sticky--1 { position: sticky; left: 0; z-index: 3; background: #f8fafc; min-width: 120px; }
 .th-sticky--2 { position: sticky; left: 120px; z-index: 3; background: #f8fafc; min-width: 90px; }
 .th-sticky--3 { position: sticky; left: 210px; z-index: 3; background: #f8fafc; box-shadow: 4px 0 8px -2px rgba(0, 0, 0, 0.06); border-right: 1px solid #e2e8f0; min-width: 90px; }
+.th-sticky-right { position: sticky; right: 0; z-index: 3; background: #f8fafc; min-width: 70px; }
 
 .td-sticky--1 { position: sticky; left: 0; z-index: 2; background: #fff; min-width: 120px; }
 .td-sticky--2 { position: sticky; left: 120px; z-index: 2; background: #fff; min-width: 90px; }
@@ -1091,6 +1287,8 @@ function getShiftKey(shift: string): string {
 .record-row:hover .td-sticky--3 {
   background: #f8fafc;
 }
+
+.td-sticky-right { position: sticky; right: 0; z-index: 2; background: #fff; box-shadow: -4px 0 8px -2px rgba(0, 0, 0, 0.06); border-left: 1px solid #e2e8f0; }
 
 /* Clickable shift-total cells */
 .td-clickable {
