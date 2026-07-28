@@ -308,7 +308,7 @@
 
 <script setup>
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
-import api from '@/api'
+import { db } from './_shared/dbService'
 
 const columns = ['date', 'bin', 'boilerDay', 'boilerMonth', 'boilerYear', 'inbound', 'stockA', 'stockB', 'stockTotal']
 
@@ -628,12 +628,11 @@ function insertRowByDate(newRow) {
 async function initData() {
   try {
     /**
-     * GET /api/v1/fine-slag-coal
      * @param {string} table  'fine_slag_coal_rows'
      * @returns {FineSlagCoalRow[]}  记录数组；若数据库为空返回 []
      * @throws 网络错误时 catch 捕获，rows.value 设为 []
      */
-    const data = await api.list('fine_slag_coal_rows')
+    const data = db.list('fine_slag_coal_rows')
     rows.value = (data || []).map((r) => ({
       ...r,
       __id: r.__id || crypto.randomUUID(),
@@ -651,9 +650,7 @@ async function initData() {
 
 // 全量持久化（手动点「保存」时触发）
 /**
- * DELETE /api/v1/fine-slag-coal
- * POST  /api/v1/fine-slag-coal/bulk
- * @description 替换式全量保存：先 api.clear() 清空，再 api.bulkPut() 批量写入。
+ * @description 替换式全量保存：先 db.clear() 清空，再 db.bulkPut() 批量写入。
  * @returns {Promise<boolean>}  true=成功，false=失败
  */
 async function persist() {
@@ -663,8 +660,8 @@ async function persist() {
       delete clean.id
       return { ...clean, updatedAt: Date.now() }
     })
-    await api.clear('fine_slag_coal_rows')
-    await api.bulkPut('fine_slag_coal_rows', payload)
+    db.clear('fine_slag_coal_rows')
+    db.bulkPut('fine_slag_coal_rows', payload)
     dirty.value = false
     lastSavedSignature.value = computeCurrentSignature()
     return true
@@ -709,8 +706,6 @@ function handleAdd() {
 }
 
 /**
- * PUT    /api/v1/fine-slag-coal/:id
- * POST   /api/v1/fine-slag-coal
  * @description 单行 Upsert：有 id → PUT，无 id → POST 创建并回填 id。
  */
 async function dbUpsertRow(row) {
@@ -718,10 +713,10 @@ async function dbUpsertRow(row) {
   delete clean.__seq; delete clean.__isNew; delete clean.__modified; delete clean.__dbId
   clean.updatedAt = Date.now()
   if (row.id) {
-    await api.update('fine_slag_coal_rows', row.id, clean)
+    db.update('fine_slag_coal_rows', row.id, clean)
   } else {
-    const newItem = await api.create('fine_slag_coal_rows', clean)
-    row.id = Array.isArray(newItem) ? newItem[newItem.length - 1].id : newItem.id
+    const newItem = db.create('fine_slag_coal_rows', clean)
+    row.id = newItem.id
   }
 }
 
@@ -730,7 +725,7 @@ async function dbUpsertRow(row) {
  * @description 按主键 id 删除单条记录；若 row.id 不存在则跳过。
  */
 async function dbDeleteRow(row) {
-  if (row.id) await api.remove('fine_slag_coal_rows', row.id)
+  if (row.id) db.remove('fine_slag_coal_rows', row.id)
 }
 
 function handleDelete(id) {
@@ -803,12 +798,9 @@ async function commitDialog() {
     editingRowSnapshot.value = null
     /**
      * kind === 'clearAll':
-     * DELETE /api/v1/fine-slag-coal
-     * @description 清空整表：snapshot → rows=[] → api.clear() → undo 可恢复。
+     * @description 清空整表：snapshot → rows=[] → db.clear() → undo 可恢复。
      */
-    try {
-      await api.clear('fine_slag_coal_rows')
-    } catch (_) {}
+    db.clear('fine_slag_coal_rows')
     dirty.value = false
     lastSavedSignature.value = computeCurrentSignature()
     showUndo(`已清空 ${snapshot.length} 条记录`, async () => {

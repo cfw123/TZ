@@ -1,4 +1,5 @@
 import { reactive, watch } from 'vue'
+import { db } from './dbService'
 
 // ---------------------------------------------------------------------------
 // Shape: a single shift's consumption payload, as confirmed from DailyConsumption
@@ -50,7 +51,7 @@ export interface OperationRecord {
 }
 
 // ---------------------------------------------------------------------------
-// Reactive store
+// Reactive store backed by dbService (localStorage persistence)
 // ---------------------------------------------------------------------------
 export const shiftRecordStore = reactive<ShiftPayload[]>([])
 
@@ -63,7 +64,17 @@ export function upsertShiftRecord(payload: ShiftPayload): void {
   } else {
     shiftRecordStore.push(payload)
   }
-  persistShiftRecordStore()
+  // Persist to dbService so changes survive page refresh
+  const existing = db.list('operation_record_rows')
+  const row = existing.find(r =>
+    r.recordDate === payload.record_date && r.shiftBatch === payload.shift_batch
+  )
+  const dbRow = buildDbRow(payload)
+  if (row?.id) {
+    db.update('operation_record_rows', row.id, dbRow)
+  } else {
+    db.create('operation_record_rows', dbRow)
+  }
 }
 
 export function removeShiftRecord(record_date: string, shift_batch: string): void {
@@ -72,8 +83,10 @@ export function removeShiftRecord(record_date: string, shift_batch: string): voi
   )
   if (idx >= 0) {
     shiftRecordStore.splice(idx, 1)
-    persistShiftRecordStore()
   }
+  const rows = db.list('operation_record_rows')
+  const row = rows.find(r => r.recordDate === record_date && r.shiftBatch === shift_batch)
+  if (row?.id) db.remove('operation_record_rows', row.id)
 }
 
 // ---------------------------------------------------------------------------
@@ -116,41 +129,32 @@ const SHIFT_ORDER: Record<string, number> = {
   '小夜班': 2,
 }
 
-
 // ---------------------------------------------------------------------------
-// localStorage persistence — survives a route change so a user can confirm a
-// shift in DailyConsumption and immediately see it in OperationRecordView
-// (and vice versa) without losing data on F5.
+// Build a db row from a ShiftPayload (nested → flat camelCase for db.json)
 // ---------------------------------------------------------------------------
-const STORAGE_KEY = 'tz_shift_record_store_v1'
-
-function persistShiftRecordStore() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(shiftRecordStore))
-  } catch (e) {
-    console.warn('[shiftRecordStore] failed to persist:', e)
+function buildDbRow(payload: ShiftPayload): Record<string, unknown> {
+  return {
+    recordDate: payload.record_date,
+    shiftBatch: payload.shift_batch,
+    boilerConsumptions: payload.boiler_consumptions,
+    gasificationConsumptions: payload.gasification_consumptions,
   }
 }
 
-function hydrateShiftRecordStore() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return
-    const parsed = JSON.parse(raw) as ShiftPayload[]
-    if (!Array.isArray(parsed)) return
-    shiftRecordStore.splice(0, shiftRecordStore.length, ...parsed)
-  } catch (e) {
-    console.warn('[shiftRecordStore] failed to hydrate:', e)
-  }
+// ---------------------------------------------------------------------------
+// Hydrate from dbService on startup
+// ---------------------------------------------------------------------------
+export function initShiftRecordStore(): void {
+  // db.list is synchronous (initSync already ran at module load)
+  const rows = db.list<Record<string, unknown>>('operation_record_rows')
+  const payloads: ShiftPayload[] = rows.map(row => ({
+    record_date: String(row.recordDate ?? ''),
+    shift_batch: String(row.shiftBatch ?? ''),
+    boiler_consumptions: (row.boilerConsumptions as BoilerConsumption | null) ?? { subtotal: 0, hl_A: 0, hl_B: 0, jz_A: 0, jz_B: 0, xz_A: 0, xz_B: 0, wn_A: 0, wn_B: 0, yl_A: 0, yl_B: 0, lx_A: 0, lx_B: 0 },
+    gasification_consumptions: (row.gasificationConsumptions as GasificationConsumption | null) ?? { subtotal: 0, coal_A: 0, coal_B: 0 },
+  }))
+  shiftRecordStore.splice(0, shiftRecordStore.length, ...payloads)
 }
 
-hydrateShiftRecordStore()
-
-// External mutations to the array (push/splice/length assignment) won't trigger
-// the watcher unless we deep-watch. Persist on any change to the array itself.
-watch(
-  () => shiftRecordStore.length,
-  () => persistShiftRecordStore()
-)
-// Also persist when any nested field changes (deep).
-watch(shiftRecordStore, () => persistShiftRecordStore(), { deep: true })
+// Call initShiftRecordStore once at module load
+initShiftRecordStore()

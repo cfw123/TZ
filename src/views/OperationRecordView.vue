@@ -30,6 +30,7 @@
         </div>
 
         <button class="btn btn-primary" @click="handleSearch">查询</button>
+        <button v-if="!isDefaultView" class="btn btn-secondary" @click="resetToDefault">恢复默认</button>
         <button class="btn btn-secondary" @click="handleExport">导出</button>
       </div>
     </div>
@@ -41,7 +42,7 @@
         <span class="section-meta">{{ currentPage }} / {{ totalPages }} 页 · 共 {{ filteredRecords.length }} 条</span>
       </div>
 
-      <div class="pagination" v-if="totalPages > 1">
+      <div class="pagination" v-if="!isDefaultView && totalPages > 1">
         <button class="btn btn-secondary" :disabled="currentPage <= 1" @click="currentPage--">上一页</button>
         <span class="page-info">{{ currentPage }} / {{ totalPages }}</span>
         <button class="btn btn-secondary" :disabled="currentPage >= totalPages" @click="currentPage++">下一页</button>
@@ -415,7 +416,7 @@
 import { ref, computed, reactive, watch, onMounted, onUnmounted } from 'vue'
 import type { OperationRecord, BoilerConsumption, GasificationConsumption } from './_shared/shiftRecordStore'
 import { getOperationRecords, shiftRecordStore } from './_shared/shiftRecordStore'
-import api from '../api'
+import { db } from './_shared/dbService'
 
 // Re-export for in-template use so the legacy type names keep working.
 export type { BoilerConsumption, GasificationConsumption }
@@ -739,6 +740,8 @@ function toLocalDateString(date: Date): string {
 
 const dateSortAsc = ref(true)
 const filterDate = ref<string>('')
+const currentYear = new Date().getFullYear().toString()
+const isDefaultView = ref(true)
 const filterGranularity = ref<'day' | 'month' | 'year'>('month')
 const dateInputAttrs = computed(() => {
   if (filterGranularity.value === 'day') return { type: 'date', placeholder: '年-月-日' }
@@ -746,8 +749,8 @@ const dateInputAttrs = computed(() => {
   return { type: 'number', placeholder: '年', min: '2020', max: '2099' }
 })
 const filterShift = ref<string>('')
-const PAGE_SIZE = 50
 const currentPage = ref(1)
+const PAGE_SIZE = computed(() => isDefaultView.value ? 1 : 50)
 
 // Shift order mapping: 大夜班(0) < 白班(1) < 小夜班(2)
 const SHIFT_ORDER: Record<string, number> = {
@@ -759,16 +762,18 @@ const SHIFT_ORDER: Record<string, number> = {
 // Apply filter to displayed records (live preview), sorted by shift order
 const filteredRecords = computed<OperationRecordRow[]>(() => {
   currentPage.value = 1
+  const defaultDate = isDefaultView.value ? `${currentYear}-${String(new Date().getMonth() + 1).padStart(2, '0')}` : ''
+  const activeDate = filterDate.value || defaultDate
   return records.value
     .filter(rec => {
-      if (!filterDate.value) return true
+      if (!activeDate) return true
       const d = rec.record_date
-      if (filterGranularity.value === 'day') return d === filterDate.value
+      if (filterGranularity.value === 'day') return d === activeDate
       if (filterGranularity.value === 'month') {
         const prefix = d.slice(0, 7)
-        return prefix === filterDate.value.slice(0, prefix.length)
+        return prefix === activeDate.slice(0, prefix.length)
       }
-      return d.slice(0, 4) === filterDate.value.slice(0, 4)
+      return d.slice(0, 4) === activeDate.slice(0, 4)
     })
     .filter(rec => {
       return !filterShift.value || rec.shift_batch === filterShift.value
@@ -782,10 +787,10 @@ const filteredRecords = computed<OperationRecordRow[]>(() => {
     })
 })
 
-const totalPages = computed(() => Math.max(1, Math.ceil(filteredRecords.value.length / PAGE_SIZE)))
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredRecords.value.length / PAGE_SIZE.value)))
 const pagedRecords = computed(() => {
-  const start = (currentPage.value - 1) * PAGE_SIZE
-  return filteredRecords.value.slice(start, start + PAGE_SIZE)
+  const start = (currentPage.value - 1) * PAGE_SIZE.value
+  return filteredRecords.value.slice(start, start + PAGE_SIZE.value)
 })
 
 // Initialize validation for all loaded records
@@ -844,14 +849,12 @@ const savedIds = reactive<Set<string>>(new Set())
 const savedDbIdMap = reactive<Map<string, string>>(new Map()) // localId -> db.id
 
 async function loadSavedIds() {
-  try {
-    const rows: any[] = await api.list('operation_record')
-    rows.forEach(row => {
-      const localId = `${row.recordDate}-${row.shiftBatch}`
-      savedIds.add(localId)
-      savedDbIdMap.set(localId, String(row.id))
-    })
-  } catch { /* ignore */ }
+  const rows = db.list('operation_record_rows')
+  rows.forEach(row => {
+    const localId = `${row.recordDate}-${row.shiftBatch}`
+    savedIds.add(localId)
+    savedDbIdMap.set(localId, String(row.id))
+  })
 }
 
 function isSaved(id: string | number) {
@@ -895,10 +898,10 @@ async function saveRecord(rec: OperationRecordRow) {
       truckUnloadDuration: rec.truck_unload_duration || null,
       truckCount: rec.truck_count || null,
     }
-    const result: any = await api.create('operation_record', payload)
+    db.create('operation_record_rows', payload)
     const localId = String(rec.id)
     savedIds.add(localId)
-    if (result?.id) savedDbIdMap.set(localId, String(result.id))
+    if (payload.id) savedDbIdMap.set(localId, String(payload.id))
     showToast('success', `${rec.record_date} · ${rec.shift_batch} 已保存到数据库`)
   } catch (e) {
     showToast('error', `保存失败: ${e instanceof Error ? e.message : e}`)
@@ -939,7 +942,7 @@ async function updateRecord(rec: OperationRecordRow) {
       truckUnloadDuration: rec.truck_unload_duration || null,
       truckCount: rec.truck_count || null,
     }
-    await api.patch('operation_record', dbId, payload)
+    db.update('operation_record_rows', dbId, payload)
     showToast('success', `${rec.record_date} · ${rec.shift_batch} 已更新`)
   } catch (e) {
     showToast('error', `修改失败: ${e instanceof Error ? e.message : e}`)
@@ -949,8 +952,17 @@ async function updateRecord(rec: OperationRecordRow) {
 }
 
 function handleSearch() {
-  // Filtering is reactive; this button provides UX feedback.
+  isDefaultView.value = false
+  filterDate.value = filterDate.value // force reactivity
   console.log('[Search] date=', filterDate.value, 'shift=', filterShift.value)
+}
+
+function resetToDefault() {
+  isDefaultView.value = true
+  filterDate.value = ''
+  filterShift.value = ''
+  filterGranularity.value = 'month'
+  currentPage.value = 1
 }
 
 function handleExport() {
