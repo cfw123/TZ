@@ -6,8 +6,8 @@
     <div class="toolbar">
       <div class="toolbar-filters">
         <div class="filter-group">
-          <label class="filter-label">日期</label>
-          <input type="date" v-model="filterDate" class="filter-input" />
+          <label class="filter-label">月份</label>
+          <input type="month" v-model="filterMonth" class="filter-input" />
         </div>
 
         <div class="filter-group">
@@ -29,7 +29,13 @@
     <div class="section-block">
       <div class="section-header">
         <span class="section-title">运行记录列表</span>
-        <span class="section-meta">共 {{ filteredRecords.length }} 条记录</span>
+        <span class="section-meta">共 {{ pagedRecords.length }} 条 / {{ filteredRecords.length }} 条</span>
+      </div>
+
+      <div class="pagination" v-if="totalPages > 1">
+        <button class="btn btn-secondary" :disabled="currentPage <= 1" @click="currentPage--">上一页</button>
+        <span class="page-info">{{ currentPage }} / {{ totalPages }}</span>
+        <button class="btn btn-secondary" :disabled="currentPage >= totalPages" @click="currentPage++">下一页</button>
       </div>
 
       <div class="table-wrapper">
@@ -61,7 +67,7 @@
           </thead>
           <tbody>
             <tr
-              v-for="rec in filteredRecords"
+              v-for="rec in pagedRecords"
               :key="rec.id"
               class="record-row"
             >
@@ -84,7 +90,12 @@
                 </div>
               </td>
               <td>
-                <input v-model="rec.execution_status" class="cell-input" />
+                <input
+                  v-model="rec.execution_status"
+                  class="cell-input"
+                  @keydown="handleExecutionKeydown($event, rec)"
+                  placeholder="↑↓选择, Enter确认"
+                />
               </td>
               <td>
                 <div class="cell-input-wrap">
@@ -433,7 +444,7 @@ function withMetadata(rec: OperationRecord, idx: number): OperationRecordRow {
   return {
     ...rec,
     run_group: runGroupSelections[String(rec.id)] ?? ['四班', '一班', '二班', '三班'][idx % 4],
-    execution_status: '已执行',
+    execution_status: rec.shift_batch === '大夜班' || rec.shift_batch === '白班' ? '已执行' : '',
     boiler_bins: '1#ABC',
     boiler_time: '08:00~10:30',
     boiler_duration: 150,
@@ -586,6 +597,53 @@ function persistRunGroupSelections() {
 watch(runGroupSelections, persistRunGroupSelections, { deep: true })
 loadRunGroupSelections()
 
+const EXECUTION_STATUS_STORAGE_KEY = 'tz_execution_status_history_v1'
+
+function getExecutionStatusHistory(): string[] {
+  try {
+    const raw = localStorage.getItem(EXECUTION_STATUS_STORAGE_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch { return [] }
+}
+
+function saveExecutionStatusHistory(values: string[]) {
+  try {
+    localStorage.setItem(EXECUTION_STATUS_STORAGE_KEY, JSON.stringify(values))
+  } catch {}
+}
+
+function handleExecutionKeydown(e: KeyboardEvent, rec: OperationRecordRow) {
+  // Get all unique non-empty values from both history and the current table
+  const allValues = Array.from(new Set([
+    ...getExecutionStatusHistory(),
+    ...filteredRecords.value.map(r => r.execution_status).filter(Boolean),
+  ]))
+
+  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    e.preventDefault()
+    if (allValues.length === 0) return
+
+    let currentIndex = allValues.indexOf(rec.execution_status)
+
+    if (e.key === 'ArrowUp') {
+      if (currentIndex <= 0) currentIndex = allValues.length - 1
+      else currentIndex--
+    } else if (e.key === 'ArrowDown') {
+      if (currentIndex === -1 || currentIndex >= allValues.length - 1) currentIndex = 0
+      else currentIndex++
+    }
+    rec.execution_status = allValues[currentIndex]
+  }
+  else if (e.key === 'Enter') {
+    e.preventDefault()
+    // Save to history
+    if (rec.execution_status && !getExecutionStatusHistory().includes(rec.execution_status)) {
+      saveExecutionStatusHistory([rec.execution_status, ...getExecutionStatusHistory()].slice(0, 20))
+    }
+    ;(e.target as HTMLInputElement).blur()
+  }
+}
+
 function confirmRunGroup(rec: OperationRecordRow) {
   const id = String(rec.id)
   const picked = runGroupSelections[id]
@@ -638,6 +696,12 @@ const records = computed<OperationRecordRow[]>(() => {
 // ---------------------------------------------------------------------------
 // Filter State
 // ---------------------------------------------------------------------------
+function toLocalMonthString(date: Date): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  return `${y}-${m}`
+}
+
 function toLocalDateString(date: Date): string {
   const y = date.getFullYear()
   const m = String(date.getMonth() + 1).padStart(2, '0')
@@ -645,8 +709,10 @@ function toLocalDateString(date: Date): string {
   return `${y}-${m}-${d}`
 }
 
-const filterDate = ref<string>(toLocalDateString(new Date()))
+const filterMonth = ref<string>(toLocalMonthString(new Date()))
 const filterShift = ref<string>('')
+const PAGE_SIZE = 50
+const currentPage = ref(1)
 
 // Shift order mapping: 大夜班(0) < 白班(1) < 小夜班(2)
 const SHIFT_ORDER: Record<string, number> = {
@@ -657,11 +723,12 @@ const SHIFT_ORDER: Record<string, number> = {
 
 // Apply filter to displayed records (live preview), sorted by shift order
 const filteredRecords = computed<OperationRecordRow[]>(() => {
+  currentPage.value = 1
   return records.value
     .filter(rec => {
-      const dateMatch = !filterDate.value || rec.record_date === filterDate.value
+      const monthMatch = !filterMonth.value || rec.record_date.startsWith(filterMonth.value)
       const shiftMatch = !filterShift.value || rec.shift_batch === filterShift.value
-      return dateMatch && shiftMatch
+      return monthMatch && shiftMatch
     })
     .sort((a, b) => {
       const dateCompare = a.record_date.localeCompare(b.record_date)
@@ -670,6 +737,12 @@ const filteredRecords = computed<OperationRecordRow[]>(() => {
       const shiftB = SHIFT_ORDER[b.shift_batch] ?? 99
       return shiftA - shiftB
     })
+})
+
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredRecords.value.length / PAGE_SIZE)))
+const pagedRecords = computed(() => {
+  const start = (currentPage.value - 1) * PAGE_SIZE
+  return filteredRecords.value.slice(start, start + PAGE_SIZE)
 })
 
 // Initialize validation for all loaded records
