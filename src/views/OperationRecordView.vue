@@ -30,6 +30,7 @@
         </div>
 
         <button class="btn btn-primary" @click="handleSearch">查询</button>
+        <button v-if="pendingDelete" class="btn btn-sm btn-warning" @click="undoDelete">撤销删除</button>
         <button v-if="!isDefaultView" class="btn btn-secondary" @click="resetToDefault">恢复默认</button>
         <button class="btn btn-secondary" @click="handleExport">导出</button>
       </div>
@@ -124,6 +125,8 @@
                     class="cell-input"
                     :class="{ 'cell-input--error': cellErrors['boiler_bins:' + rec.id] }"
                     @input="validateBoilerBins(rec, ($event.target as HTMLInputElement).value)"
+                    @keydown="handleBoilerBinsKeydown($event, rec)"
+                    placeholder="↑↓选择, Enter确认"
                     :disabled="editingId !== null && editingId !== String(rec.id)"
                   />
                   <span v-if="cellErrors['boiler_bins:' + rec.id]" class="cell-error">{{ cellErrors['boiler_bins:' + rec.id] }}</span>
@@ -136,6 +139,7 @@
                     class="cell-input cell-textarea"
                     :class="{ 'cell-input--error': timeCellErrors['boiler:' + rec.id] }"
                     @input="onTimeTextareaInput($event, rec, 'boiler')"
+                    @keydown="handleBoilerTimeKeydown($event, rec)"
                     placeholder="08:00~18:00"
                     rows="1"
                     :disabled="editingId !== null && editingId !== String(rec.id)"
@@ -166,6 +170,7 @@
                     v-model="rec.blend_mix"
                     class="cell-input"
                     placeholder="如：烟煤50%/焦煤30%/无烟煤20%"
+                    @keydown="handleBlendMixKeydown($event, rec)"
                     :disabled="editingId !== null && editingId !== String(rec.id)"
                   />
                 </div>
@@ -177,6 +182,8 @@
                     class="cell-input"
                     :class="{ 'cell-input--error': gasCellErrors[rec.id] }"
                     @input="validateGasBins(rec, ($event.target as HTMLInputElement).value)"
+                    @keydown="handleGasBinsKeydown($event, rec)"
+                    placeholder="↑↓选择, Enter确认"
                     :disabled="editingId !== null && editingId !== String(rec.id)"
                   />
                   <span v-if="gasCellErrors[rec.id]" class="cell-error">{{ gasCellErrors[rec.id] }}</span>
@@ -189,7 +196,8 @@
                     class="cell-input cell-textarea"
                     :class="{ 'cell-input--error': timeCellErrors['gasification:' + rec.id] }"
                     @input="onTimeTextareaInput($event, rec, 'gasification')"
-                    placeholder="08:00~18:00"
+                    @keydown="handleBoilerTimeKeydown($event, rec)"
+                    placeholder="↑↓选择, Enter确认"
                     rows="1"
                     :disabled="editingId !== null && editingId !== String(rec.id)"
                   ></textarea>
@@ -207,7 +215,8 @@
                     :value="rec.reason"
                     class="cell-input cell-textarea cell-textarea--note"
                     @input="onNoteInput(rec, 'reason', ($event.target as HTMLTextAreaElement).value)"
-                    placeholder="原因说明"
+                    @keydown="handleReasonKeydown($event, rec)"
+                    placeholder="↑↓选择, Enter确认"
                     rows="1"
                     :disabled="editingId !== null && editingId !== String(rec.id)"
                   ></textarea>
@@ -219,7 +228,8 @@
                     :value="rec.remarks"
                     class="cell-input cell-textarea cell-textarea--note"
                     @input="onNoteInput(rec, 'remarks', ($event.target as HTMLTextAreaElement).value)"
-                    placeholder="备注"
+                    @keydown="handleReasonKeydown($event, rec)"
+                    placeholder="↑↓选择, Enter确认"
                     rows="1"
                     :disabled="editingId !== null && editingId !== String(rec.id)"
                   ></textarea>
@@ -232,7 +242,8 @@
                     class="cell-input cell-textarea"
                     :class="{ 'cell-input--error': timeCellErrors['truck:' + rec.id] }"
                     @input="onTimeTextareaInput($event, rec, 'truck')"
-                    placeholder="09:00~11:00"
+                    @keydown="handleBoilerTimeKeydown($event, rec)"
+                    placeholder="↑↓选择, Enter确认"
                     rows="1"
                     :disabled="editingId !== null && editingId !== String(rec.id)"
                   ></textarea>
@@ -260,6 +271,14 @@
                   @click="handleRowAction(rec)"
                 >
                   {{ savingIds.has(String(rec.id)) ? '保存中…' : (editingId === String(rec.id) ? '完成' : (isSaved(rec.id) ? '编辑' : '保存')) }}
+                </button>
+                <button
+                  v-if="isSaved(rec.id)"
+                  class="btn btn-sm btn-danger"
+                  :disabled="editingId !== null && editingId !== String(rec.id)"
+                  @click="requestDelete(rec)"
+                >
+                  删除
                 </button>
               </td>
             </tr>
@@ -638,6 +657,10 @@ watch(runGroupSelections, persistRunGroupSelections, { deep: true })
 loadRunGroupSelections()
 
 const EXECUTION_STATUS_STORAGE_KEY = 'tz_execution_status_history_v1'
+const REASON_STORAGE_KEY = 'tz_reason_history_v1'
+const BOILER_BINS_STORAGE_KEY = 'tz_boiler_bins_history_v1'
+const BLEND_MIX_STORAGE_KEY = 'tz_blend_mix_history_v1'
+const BOILER_TIME_STORAGE_KEY = 'tz_boiler_time_history_v1'
 
 function getExecutionStatusHistory(): string[] {
   try {
@@ -652,6 +675,19 @@ function saveExecutionStatusHistory(values: string[]) {
   } catch {}
 }
 
+function getReasonHistory(): string[] {
+  try {
+    const raw = localStorage.getItem(REASON_STORAGE_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch { return [] }
+}
+
+function saveReasonHistory(values: string[]) {
+  try {
+    localStorage.setItem(REASON_STORAGE_KEY, JSON.stringify(values))
+  } catch {}
+}
+
 function getUniqueExecutionStatusesFromDB(): string[] {
   try {
     const rows = db.list<Record<string, unknown>>('operation_record_rows')
@@ -662,6 +698,108 @@ function getUniqueExecutionStatusesFromDB(): string[] {
   } catch (e) {
     console.warn('[OperationRecordView] Failed to fetch unique execution statuses from DB:', e)
     return []
+  }
+}
+
+function getUniqueReasonsFromDB(): string[] {
+  try {
+    const rows = db.list<Record<string, unknown>>('operation_record_rows')
+    const dbValues = rows
+      .map(r => String(r.reason ?? '').trim())
+      .filter(val => Boolean(val) && val !== 'null' && val !== 'undefined')
+    return Array.from(new Set(dbValues))
+  } catch (e) {
+    console.warn('[OperationRecordView] Failed to fetch unique reasons from DB:', e)
+    return []
+  }
+}
+
+function getUniqueBoilerBinsFromDB(): string[] {
+  try {
+    const rows = db.list<Record<string, unknown>>('operation_record_rows')
+    const dbValues = rows
+      .map(r => String(r.boiler_bins ?? '').trim())
+      .filter(val => Boolean(val) && val !== 'null' && val !== 'undefined')
+    return Array.from(new Set(dbValues))
+  } catch (e) {
+    console.warn('[OperationRecordView] Failed to fetch unique boiler_bins from DB:', e)
+    return []
+  }
+}
+
+function getUniqueGasBinsFromDB(): string[] {
+  try {
+    const rows = db.list<Record<string, unknown>>('operation_record_rows')
+    const dbValues = rows
+      .map(r => String(r.gasification_bins ?? '').trim())
+      .filter(val => Boolean(val) && val !== 'null' && val !== 'undefined')
+    return Array.from(new Set(dbValues))
+  } catch (e) {
+    console.warn('[OperationRecordView] Failed to fetch gasification_bins from DB:', e)
+    return []
+  }
+}
+
+function getUniqueBoilerTimeFromDB(): string[] {
+  try {
+    const rows = db.list<Record<string, unknown>>('operation_record_rows')
+    const dbValues = rows
+      .map(r => String(r.boiler_time ?? '').trim())
+      .filter(val => Boolean(val) && val !== 'null' && val !== 'undefined')
+    return Array.from(new Set(dbValues))
+  } catch (e) {
+    console.warn('[OperationRecordView] Failed to fetch unique boiler_time from DB:', e)
+    return []
+  }
+}
+
+function getUniqueBlendMixFromDB(): string[] {
+  try {
+    const rows = db.list<Record<string, unknown>>('operation_record_rows')
+    const dbValues = rows
+      .map(r => String(r.blendMix ?? r.blend_mix ?? '').trim())
+      .filter(val => Boolean(val) && val !== 'null' && val !== 'undefined')
+    return Array.from(new Set(dbValues))
+  } catch (e) {
+    console.warn('[OperationRecordView] Failed to fetch unique blendMix from DB:', e)
+    return []
+  }
+}
+
+function getBlendMixHistory(): string[] {
+  try {
+    const raw = localStorage.getItem(BLEND_MIX_STORAGE_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch { return [] }
+}
+
+function saveBlendMixHistory(values: string[]) {
+  try {
+    localStorage.setItem(BLEND_MIX_STORAGE_KEY, JSON.stringify(values))
+  } catch {}
+}
+
+function handleBlendMixKeydown(e: KeyboardEvent, rec: OperationRecordRow) {
+  const allValues = Array.from(new Set([
+    ...getBlendMixHistory(),
+    ...filteredRecords.value.map(r => r.blend_mix).filter(Boolean),
+    ...getUniqueBlendMixFromDB(),
+  ]))
+
+  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    e.preventDefault()
+    if (allValues.length === 0) return
+    let currentIndex = allValues.indexOf(rec.blend_mix)
+    if (e.key === 'ArrowUp') currentIndex = currentIndex <= 0 ? allValues.length - 1 : currentIndex - 1
+    else currentIndex = currentIndex === -1 || currentIndex >= allValues.length - 1 ? 0 : currentIndex + 1
+    rec.blend_mix = allValues[currentIndex]
+    ;(e.target as HTMLInputElement).value = allValues[currentIndex]
+  } else if (e.key === 'Enter') {
+    e.preventDefault()
+    if (rec.blend_mix && !getBlendMixHistory().includes(rec.blend_mix)) {
+      saveBlendMixHistory([rec.blend_mix, ...getBlendMixHistory()].slice(0, 20))
+    }
+    ;(e.target as HTMLInputElement).blur()
   }
 }
 
@@ -696,6 +834,128 @@ function handleExecutionKeydown(e: KeyboardEvent, rec: OperationRecordRow) {
       saveExecutionStatusHistory([rec.execution_status, ...getExecutionStatusHistory()].slice(0, 20))
     }
     ;(e.target as HTMLInputElement).blur()
+  }
+}
+
+function handleReasonKeydown(e: KeyboardEvent, rec: OperationRecordRow) {
+  const allValues = Array.from(new Set([
+    ...getReasonHistory(),
+    ...filteredRecords.value.map(r => r.reason).filter(Boolean),
+    ...getUniqueReasonsFromDB(),
+  ]))
+
+  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    e.preventDefault()
+    if (allValues.length === 0) return
+    let currentIndex = allValues.indexOf(rec.reason)
+    if (e.key === 'ArrowUp') currentIndex = currentIndex <= 0 ? allValues.length - 1 : currentIndex - 1
+    else currentIndex = currentIndex === -1 || currentIndex >= allValues.length - 1 ? 0 : currentIndex + 1
+    rec.reason = allValues[currentIndex]
+    ;(e.target as HTMLTextAreaElement).value = allValues[currentIndex]
+  } else if (e.key === 'Enter') {
+    e.preventDefault()
+    if (rec.reason && !getReasonHistory().includes(rec.reason)) {
+      saveReasonHistory([rec.reason, ...getReasonHistory()].slice(0, 20))
+    }
+    ;(e.target as HTMLTextAreaElement).blur()
+  }
+}
+
+function getBoilerBinsHistory(): string[] {
+  try {
+    const raw = localStorage.getItem(BOILER_BINS_STORAGE_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch { return [] }
+}
+
+function saveBoilerBinsHistory(values: string[]) {
+  try {
+    localStorage.setItem(BOILER_BINS_STORAGE_KEY, JSON.stringify(values))
+  } catch {}
+}
+
+function handleBoilerBinsKeydown(e: KeyboardEvent, rec: OperationRecordRow) {
+  const allValues = Array.from(new Set([
+    ...getBoilerBinsHistory(),
+    ...filteredRecords.value.map(r => r.boiler_bins).filter(Boolean),
+    ...getUniqueBoilerBinsFromDB(),
+  ]))
+
+  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    e.preventDefault()
+    if (allValues.length === 0) return
+    let currentIndex = allValues.indexOf(rec.boiler_bins)
+    if (e.key === 'ArrowUp') currentIndex = currentIndex <= 0 ? allValues.length - 1 : currentIndex - 1
+    else currentIndex = currentIndex === -1 || currentIndex >= allValues.length - 1 ? 0 : currentIndex + 1
+    rec.boiler_bins = allValues[currentIndex]
+    ;(e.target as HTMLInputElement).value = allValues[currentIndex]
+  } else if (e.key === 'Enter') {
+    e.preventDefault()
+    if (rec.boiler_bins && !getBoilerBinsHistory().includes(rec.boiler_bins)) {
+      saveBoilerBinsHistory([rec.boiler_bins, ...getBoilerBinsHistory()].slice(0, 20))
+    }
+    ;(e.target as HTMLInputElement).blur()
+  }
+}
+
+function handleGasBinsKeydown(e: KeyboardEvent, rec: OperationRecordRow) {
+  const allValues = Array.from(new Set([
+    ...getBoilerBinsHistory(),
+    ...filteredRecords.value.map(r => r.gasification_bins).filter(Boolean),
+    ...getUniqueGasBinsFromDB(),
+  ]))
+
+  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    e.preventDefault()
+    if (allValues.length === 0) return
+    let currentIndex = allValues.indexOf(rec.gasification_bins)
+    if (e.key === 'ArrowUp') currentIndex = currentIndex <= 0 ? allValues.length - 1 : currentIndex - 1
+    else currentIndex = currentIndex === -1 || currentIndex >= allValues.length - 1 ? 0 : currentIndex + 1
+    rec.gasification_bins = allValues[currentIndex]
+    ;(e.target as HTMLInputElement).value = allValues[currentIndex]
+  } else if (e.key === 'Enter') {
+    e.preventDefault()
+    if (rec.gasification_bins && !getBoilerBinsHistory().includes(rec.gasification_bins)) {
+      saveBoilerBinsHistory([rec.gasification_bins, ...getBoilerBinsHistory()].slice(0, 20))
+    }
+    ;(e.target as HTMLInputElement).blur()
+  }
+}
+
+function getBoilerTimeHistory(): string[] {
+  try {
+    const raw = localStorage.getItem(BOILER_TIME_STORAGE_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch { return [] }
+}
+
+function saveBoilerTimeHistory(values: string[]) {
+  try {
+    localStorage.setItem(BOILER_TIME_STORAGE_KEY, JSON.stringify(values))
+  } catch {}
+}
+
+function handleBoilerTimeKeydown(e: KeyboardEvent, rec: OperationRecordRow) {
+  const allValues = Array.from(new Set([
+    ...getBoilerTimeHistory(),
+    ...filteredRecords.value.map(r => r.boiler_time).filter(Boolean),
+    ...getUniqueBoilerTimeFromDB(),
+  ]))
+
+  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    e.preventDefault()
+    if (allValues.length === 0) return
+    let currentIndex = allValues.indexOf(rec.boiler_time)
+    if (e.key === 'ArrowUp') currentIndex = currentIndex <= 0 ? allValues.length - 1 : currentIndex - 1
+    else currentIndex = currentIndex === -1 || currentIndex >= allValues.length - 1 ? 0 : currentIndex + 1
+    rec.boiler_time = allValues[currentIndex]
+    ;(e.target as HTMLTextAreaElement).value = allValues[currentIndex]
+  } else if (e.key === 'Enter') {
+    e.preventDefault()
+    if (rec.boiler_time && !getBoilerTimeHistory().includes(rec.boiler_time)) {
+      saveBoilerTimeHistory([rec.boiler_time, ...getBoilerTimeHistory()].slice(0, 20))
+    }
+    ;(e.target as HTMLTextAreaElement).blur()
   }
 }
 
@@ -902,6 +1162,7 @@ function showToast(_type: 'success' | 'error' | 'info', message: string) {
 }
 
 const savingIds = reactive<Set<string>>(new Set())
+const pendingDelete = ref<{ rec: OperationRecordRow; timer: ReturnType<typeof setTimeout> } | null>(null)
 const editingId = ref<string | null>(null)
 const savedIds = reactive<Set<string>>(new Set())
 const savedDbIdMap = reactive<Map<string, string>>(new Map()) // localId -> db.id
@@ -931,6 +1192,35 @@ function startEdit(id: string) {
 
 function exitEditMode() {
   editingId.value = null
+}
+
+function requestDelete(rec: OperationRecordRow) {
+  if (!confirm(`确定要删除 ${rec.record_date} · ${rec.shift_batch} 吗？\n删除后可在 5 分钟内点击「撤销」恢复。`)) return
+  const dbId = savedDbIdMap.get(String(rec.id))
+  if (dbId) {
+    try { db.delete('operation_record_rows', dbId) } catch {}
+    savedIds.delete(String(rec.id))
+    savedDbIdMap.delete(String(rec.id))
+  }
+  // Remove from visible list
+  records.value = records.value.filter(r => String(r.id) !== String(rec.id))
+  const timer = setTimeout(() => {
+    if (pendingDelete.value?.rec.id === rec.id) pendingDelete.value = null
+  }, 5 * 60 * 1000)
+  pendingDelete.value = { rec, timer }
+  showToast('info', `已删除 · 5 分钟内可撤销`)
+}
+
+function undoDelete() {
+  if (!pendingDelete.value) return
+  clearTimeout(pendingDelete.value.timer)
+  const rec = pendingDelete.value.rec
+  pendingDelete.value = null
+  // Re-add to list and restore saved state
+  const exists = records.value.find(r => String(r.id) === String(rec.id))
+  if (!exists) records.value.push(rec)
+  refreshTrigger.value++
+  showToast('success', `已撤销删除`)
 }
 
 async function handleRowAction(rec: OperationRecordRow) {
@@ -1205,6 +1495,28 @@ function getShiftKey(shift: string): string {
 .btn-secondary:hover {
   background: #f1f5f9;
   border-color: #94a3b8;
+}
+
+.btn-danger {
+  background: #ffffff;
+  color: #dc2626;
+  border-color: #fca5a5;
+}
+
+.btn-danger:hover {
+  background: #fef2f2;
+  border-color: #dc2626;
+}
+
+.btn-warning {
+  background: #fffbeb;
+  color: #92400e;
+  border-color: #fde68a;
+}
+
+.btn-warning:hover {
+  background: #fef3c7;
+  border-color: #d97706;
 }
 
 .btn-sm {
