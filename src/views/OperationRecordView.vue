@@ -42,7 +42,7 @@
         <span class="section-meta">{{ currentPage }} / {{ totalPages }} 页 · 共 {{ filteredRecords.length }} 条</span>
       </div>
 
-      <div class="pagination" v-if="!isDefaultView && totalPages > 1">
+      <div class="pagination" v-if="totalPages > 1">
         <button class="btn btn-secondary" :disabled="currentPage <= 1" @click="currentPage--">上一页</button>
         <span class="page-info">{{ currentPage }} / {{ totalPages }}</span>
         <button class="btn btn-secondary" :disabled="currentPage >= totalPages" @click="currentPage++">下一页</button>
@@ -83,7 +83,11 @@
               v-for="rec in pagedRecords"
               :key="rec.id"
               class="record-row"
-              :class="{ 'record-row--saved': isSaved(rec.id) }"
+              :class="{
+                'record-row--saved': isSaved(rec.id),
+                'record-row--editing': editingId === String(rec.id),
+                'record-row--locked': editingId !== null && editingId !== String(rec.id),
+              }"
             >
               <td class="td-sticky td-sticky--1">{{ rec.record_date }}</td>
               <td class="td-sticky td-sticky--2">
@@ -97,6 +101,7 @@
                     v-model="runGroupSelections[rec.id]"
                     class="run-group-select"
                     @change="confirmRunGroup(rec)"
+                    :disabled="editingId !== null && editingId !== String(rec.id)"
                   >
                     <option v-for="opt in RUN_GROUP_OPTIONS" :key="opt" :value="opt">{{ opt }}</option>
                   </select>
@@ -109,6 +114,7 @@
                   class="cell-input"
                   @keydown="handleExecutionKeydown($event, rec)"
                   placeholder="↑↓选择, Enter确认"
+                  :disabled="editingId !== null && editingId !== String(rec.id)"
                 />
               </td>
               <td>
@@ -118,6 +124,7 @@
                     class="cell-input"
                     :class="{ 'cell-input--error': cellErrors['boiler_bins:' + rec.id] }"
                     @input="validateBoilerBins(rec, ($event.target as HTMLInputElement).value)"
+                    :disabled="editingId !== null && editingId !== String(rec.id)"
                   />
                   <span v-if="cellErrors['boiler_bins:' + rec.id]" class="cell-error">{{ cellErrors['boiler_bins:' + rec.id] }}</span>
                 </div>
@@ -131,6 +138,7 @@
                     @input="onTimeTextareaInput($event, rec, 'boiler')"
                     placeholder="08:00~18:00"
                     rows="1"
+                    :disabled="editingId !== null && editingId !== String(rec.id)"
                   ></textarea>
                   <span v-if="timeCellErrors['boiler:' + rec.id]" class="cell-error">{{ timeCellErrors['boiler:' + rec.id] }}</span>
                 </div>
@@ -143,6 +151,7 @@
                     class="cell-input cell-input--num"
                     min="0"
                     step="1"
+                    :disabled="editingId !== null && editingId !== String(rec.id)"
                   />
                 </div>
               </td>
@@ -157,6 +166,7 @@
                     v-model="rec.blend_mix"
                     class="cell-input"
                     placeholder="如：烟煤50%/焦煤30%/无烟煤20%"
+                    :disabled="editingId !== null && editingId !== String(rec.id)"
                   />
                 </div>
               </td>
@@ -167,6 +177,7 @@
                     class="cell-input"
                     :class="{ 'cell-input--error': gasCellErrors[rec.id] }"
                     @input="validateGasBins(rec, ($event.target as HTMLInputElement).value)"
+                    :disabled="editingId !== null && editingId !== String(rec.id)"
                   />
                   <span v-if="gasCellErrors[rec.id]" class="cell-error">{{ gasCellErrors[rec.id] }}</span>
                 </div>
@@ -180,6 +191,7 @@
                     @input="onTimeTextareaInput($event, rec, 'gasification')"
                     placeholder="08:00~18:00"
                     rows="1"
+                    :disabled="editingId !== null && editingId !== String(rec.id)"
                   ></textarea>
                   <span v-if="timeCellErrors['gasification:' + rec.id]" class="cell-error">{{ timeCellErrors['gasification:' + rec.id] }}</span>
                 </div>
@@ -197,6 +209,7 @@
                     @input="onNoteInput(rec, 'reason', ($event.target as HTMLTextAreaElement).value)"
                     placeholder="原因说明"
                     rows="1"
+                    :disabled="editingId !== null && editingId !== String(rec.id)"
                   ></textarea>
                 </div>
               </td>
@@ -208,6 +221,7 @@
                     @input="onNoteInput(rec, 'remarks', ($event.target as HTMLTextAreaElement).value)"
                     placeholder="备注"
                     rows="1"
+                    :disabled="editingId !== null && editingId !== String(rec.id)"
                   ></textarea>
                 </div>
               </td>
@@ -220,6 +234,7 @@
                     @input="onTimeTextareaInput($event, rec, 'truck')"
                     placeholder="09:00~11:00"
                     rows="1"
+                    :disabled="editingId !== null && editingId !== String(rec.id)"
                   ></textarea>
                   <span v-if="timeCellErrors['truck:' + rec.id]" class="cell-error">{{ timeCellErrors['truck:' + rec.id] }}</span>
                 </div>
@@ -233,28 +248,19 @@
                     class="cell-input cell-input--num"
                     min="0"
                     step="1"
+                    :disabled="editingId !== null && editingId !== String(rec.id)"
                   />
                 </div>
               </td>
               <td class="td-action td-sticky-right">
-                <template v-if="isSaved(rec.id)">
-                  <button
-                    class="btn btn-secondary btn-sm"
-                    :disabled="savingIds.has(String(rec.id))"
-                    @click="updateRecord(rec)"
-                  >
-                    {{ savingIds.has(String(rec.id)) ? '修改中…' : '修改' }}
-                  </button>
-                </template>
-                <template v-else>
-                  <button
-                    class="btn btn-primary btn-sm"
-                    :disabled="savingIds.has(String(rec.id))"
-                    @click="saveRecord(rec)"
-                  >
-                    {{ savingIds.has(String(rec.id)) ? '保存中…' : '保存' }}
-                  </button>
-                </template>
+                <button
+                  class="btn btn-sm"
+                  :class="editingId === String(rec.id) ? 'btn-primary' : (isSaved(rec.id) ? 'btn-secondary' : 'btn-primary')"
+                  :disabled="savingIds.has(String(rec.id)) || (editingId !== null && editingId !== String(rec.id))"
+                  @click="handleRowAction(rec)"
+                >
+                  {{ savingIds.has(String(rec.id)) ? '保存中…' : (editingId === String(rec.id) ? '完成' : (isSaved(rec.id) ? '编辑' : '保存')) }}
+                </button>
               </td>
             </tr>
             <tr v-if="filteredRecords.length === 0">
@@ -415,7 +421,6 @@
 <script setup lang="ts">
 import { ref, computed, reactive, watch, onMounted, onUnmounted } from 'vue'
 import type { OperationRecord, BoilerConsumption, GasificationConsumption } from './_shared/shiftRecordStore'
-import { getOperationRecords, shiftRecordStore } from './_shared/shiftRecordStore'
 import { db } from './_shared/dbService'
 
 // Re-export for in-template use so the legacy type names keep working.
@@ -647,11 +652,25 @@ function saveExecutionStatusHistory(values: string[]) {
   } catch {}
 }
 
+function getUniqueExecutionStatusesFromDB(): string[] {
+  try {
+    const rows = db.list<Record<string, unknown>>('operation_record_rows')
+    const dbValues = rows
+      .map(r => String(r.executionStatus ?? r.execution_status ?? '').trim())
+      .filter(val => Boolean(val) && val !== 'null' && val !== 'undefined')
+    return Array.from(new Set(dbValues))
+  } catch (e) {
+    console.warn('[OperationRecordView] Failed to fetch unique execution statuses from DB:', e)
+    return []
+  }
+}
+
 function handleExecutionKeydown(e: KeyboardEvent, rec: OperationRecordRow) {
-  // Get all unique non-empty values from both history and the current table
+  // Get all unique non-empty values from history, table, and DB
   const allValues = Array.from(new Set([
     ...getExecutionStatusHistory(),
     ...filteredRecords.value.map(r => r.execution_status).filter(Boolean),
+    ...getUniqueExecutionStatusesFromDB(),
   ]))
 
   if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
@@ -668,6 +687,7 @@ function handleExecutionKeydown(e: KeyboardEvent, rec: OperationRecordRow) {
       else currentIndex++
     }
     rec.execution_status = allValues[currentIndex]
+    ;(e.target as HTMLInputElement).value = allValues[currentIndex]
   }
   else if (e.key === 'Enter') {
     e.preventDefault()
@@ -717,16 +737,48 @@ function confirmRunGroup(rec: OperationRecordRow) {
 }
 
 // Live records: when the store has confirmed shifts, show them; otherwise show
-// the demo seed. Vue's reactivity follows the store's `length` and `deep`
-// fields, so navigating back from DailyConsumption immediately reflects new
-// confirmations.
+// records is directly backed by db.list so saves/updates are immediately visible.
+// refreshTrigger bumps on every save/update so records re-reads from db.list
+const refreshTrigger = ref(0)
+
 const records = computed<OperationRecordRow[]>(() => {
-  const live = getOperationRecords()
-  if (live.length > 0) return live.map(withMetadata)
+  refreshTrigger.value // pull in reactivity
+  const rows = db.list<Record<string, unknown>>('operation_record_rows')
+  if (rows.length > 0) return rows.map(buildRow)
   // fallback: demo seed (only when nothing has been confirmed)
-  if (shiftRecordStore.length === 0) return makeDemoSeed().map(withMetadata)
-  return []
+  return makeDemoSeed().map(withMetadata)
 })
+
+// Build an OperationRecordRow from a db row (flat camelCase → nested snake_case + metadata)
+function buildRow(row: Record<string, unknown>, idx: number): OperationRecordRow {
+  const id = `${row.recordDate}-${row.shiftBatch}`
+  const bc = (row.boilerConsumptions as BoilerConsumption | null) ?? { subtotal: 0, hl_A: 0, hl_B: 0, jz_A: 0, jz_B: 0, xz_A: 0, xz_B: 0, wn_A: 0, wn_B: 0, yl_A: 0, yl_B: 0, lx_A: 0, lx_B: 0 }
+  const gc = (row.gasificationConsumptions as GasificationConsumption | null) ?? { subtotal: 0, coal_A: 0, coal_B: 0 }
+  return {
+    id,
+    record_date: String(row.recordDate ?? ''),
+    shift_batch: String(row.shiftBatch ?? ''),
+    run_group: runGroupSelections[id] ?? ['四班', '一班', '二班', '三班'][idx % 4],
+    execution_status: String(row.executionStatus ?? ''),
+    boiler_bins: String(row.boilerBins ?? ''),
+    boiler_time: String(row.boilerTime ?? ''),
+    boiler_duration: 0,
+    boiler_blend_xz: 0,
+    blend_mix: String(row.blendMix ?? ''),
+    gasification_bins: String(row.gasificationBins ?? ''),
+    gasification_time: String(row.gasificationTime ?? ''),
+    gasification_duration: 0,
+    reason: String(row.reason ?? ''),
+    remarks: String(row.remarks ?? ''),
+    truck_unload_time: String(row.truckUnloadTime ?? ''),
+    truck_unload_duration: 0,
+    truck_count: 0,
+    boiler_consumptions: bc,
+    gasification_consumptions: gc,
+    boiler_daily_total: Number(row.boilerDayTotal ?? 0),
+    gasification_daily_total: Number(row.gasificationDayTotal ?? 0),
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Filter State
@@ -740,8 +792,13 @@ function toLocalDateString(date: Date): string {
 
 const dateSortAsc = ref(true)
 const filterDate = ref<string>('')
-const currentYear = new Date().getFullYear().toString()
 const isDefaultView = ref(true)
+
+function defaultMonthStr() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
 const filterGranularity = ref<'day' | 'month' | 'year'>('month')
 const dateInputAttrs = computed(() => {
   if (filterGranularity.value === 'day') return { type: 'date', placeholder: '年-月-日' }
@@ -750,7 +807,7 @@ const dateInputAttrs = computed(() => {
 })
 const filterShift = ref<string>('')
 const currentPage = ref(1)
-const PAGE_SIZE = computed(() => isDefaultView.value ? 1 : 50)
+const PAGE_SIZE = computed(() => isDefaultView.value ? 50 : 50)
 
 // Shift order mapping: 大夜班(0) < 白班(1) < 小夜班(2)
 const SHIFT_ORDER: Record<string, number> = {
@@ -762,7 +819,7 @@ const SHIFT_ORDER: Record<string, number> = {
 // Apply filter to displayed records (live preview), sorted by shift order
 const filteredRecords = computed<OperationRecordRow[]>(() => {
   currentPage.value = 1
-  const defaultDate = isDefaultView.value ? `${currentYear}-${String(new Date().getMonth() + 1).padStart(2, '0')}` : ''
+  const defaultDate = isDefaultView.value ? defaultMonthStr() : ''
   const activeDate = filterDate.value || defaultDate
   return records.value
     .filter(rec => {
@@ -845,6 +902,7 @@ function showToast(_type: 'success' | 'error' | 'info', message: string) {
 }
 
 const savingIds = reactive<Set<string>>(new Set())
+const editingId = ref<string | null>(null)
 const savedIds = reactive<Set<string>>(new Set())
 const savedDbIdMap = reactive<Map<string, string>>(new Map()) // localId -> db.id
 
@@ -859,6 +917,31 @@ async function loadSavedIds() {
 
 function isSaved(id: string | number) {
   return savedIds.has(String(id))
+}
+
+function startEdit(id: string) {
+  if (editingId.value !== null) {
+    const prevId = editingId.value
+    exitEditMode()
+    if (prevId !== id) editingId.value = id
+  } else {
+    editingId.value = id
+  }
+}
+
+function exitEditMode() {
+  editingId.value = null
+}
+
+async function handleRowAction(rec: OperationRecordRow) {
+  if (editingId.value === String(rec.id)) {
+    // In edit mode → complete: save and exit
+    await (isSaved(rec.id) ? updateRecord(rec) : saveRecord(rec))
+    editingId.value = null
+  } else {
+    // Not in edit mode → enter edit mode
+    editingId.value = String(rec.id)
+  }
 }
 
 async function saveRecord(rec: OperationRecordRow) {
@@ -902,6 +985,7 @@ async function saveRecord(rec: OperationRecordRow) {
     const localId = String(rec.id)
     savedIds.add(localId)
     if (payload.id) savedDbIdMap.set(localId, String(payload.id))
+    refreshTrigger.value++
     showToast('success', `${rec.record_date} · ${rec.shift_batch} 已保存到数据库`)
   } catch (e) {
     showToast('error', `保存失败: ${e instanceof Error ? e.message : e}`)
@@ -943,6 +1027,7 @@ async function updateRecord(rec: OperationRecordRow) {
       truckCount: rec.truck_count || null,
     }
     db.update('operation_record_rows', dbId, payload)
+    refreshTrigger.value++
     showToast('success', `${rec.record_date} · ${rec.shift_batch} 已更新`)
   } catch (e) {
     showToast('error', `修改失败: ${e instanceof Error ? e.message : e}`)
@@ -1282,6 +1367,28 @@ function getShiftKey(shift: string): string {
 }
 .record-row--saved .td-sticky--1 {
   box-shadow: inset 3px 0 0 #16a34a;
+}
+
+/* Edit mode */
+.record-row--editing {
+  background: #fffbeb;
+  box-shadow: inset 0 0 0 2px #f59e0b;
+}
+.record-row--editing .cell-input:not(:disabled) {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+
+/* Locked rows (another row is being edited) */
+.record-row--locked td {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.record-row--locked .td-sticky--1,
+.record-row--locked .td-sticky--2,
+.record-row--locked .td-sticky--3 {
+  opacity: 0.45;
+  pointer-events: auto;
 }
 
 /* Sticky first 3 columns */
