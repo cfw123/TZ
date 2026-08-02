@@ -29,10 +29,16 @@
           </select>
         </div>
 
-        <button class="btn btn-primary" @click="handleSearch">查询</button>
-        <button v-if="pendingDelete" class="btn btn-sm btn-warning" @click="undoDelete">撤销删除</button>
-        <button v-if="!isDefaultView" class="btn btn-secondary" @click="resetToDefault">恢复默认</button>
-        <button class="btn btn-secondary" @click="handleExport">导出</button>
+        <div class="toolbar-actions toolbar-actions--primary">
+          <button class="btn btn-accent" @click="handleCreate">+ 新增</button>
+          <button class="btn btn-primary" @click="handleSearch">查询</button>
+        </div>
+
+        <div class="toolbar-actions toolbar-actions--secondary">
+          <button v-if="pendingDelete" class="btn btn-sm btn-warning" @click="undoDelete">撤销删除</button>
+          <button v-if="!isDefaultView" class="btn btn-secondary" @click="resetToDefault">恢复默认</button>
+          <button class="btn btn-secondary" @click="handleExport">导出</button>
+        </div>
       </div>
     </div>
 
@@ -102,7 +108,7 @@
                     v-model="runGroupSelections[rec.id]"
                     class="run-group-select"
                     @change="confirmRunGroup(rec)"
-                    :disabled="editingId !== null && editingId !== String(rec.id)"
+                    :disabled="editingId !== String(rec.id)"
                   >
                     <option v-for="opt in RUN_GROUP_OPTIONS" :key="opt" :value="opt">{{ opt }}</option>
                   </select>
@@ -115,7 +121,7 @@
                   class="cell-input"
                   @keydown="handleExecutionKeydown($event, rec)"
                   placeholder="↑↓选择, Enter确认"
-                  :disabled="editingId !== null && editingId !== String(rec.id)"
+                  :disabled="editingId !== String(rec.id)"
                 />
               </td>
               <td>
@@ -127,7 +133,7 @@
                     @input="validateBoilerBins(rec, ($event.target as HTMLInputElement).value)"
                     @keydown="handleBoilerBinsKeydown($event, rec)"
                     placeholder="↑↓选择, Enter确认"
-                    :disabled="editingId !== null && editingId !== String(rec.id)"
+                    :disabled="editingId !== String(rec.id)"
                   />
                   <span v-if="cellErrors['boiler_bins:' + rec.id]" class="cell-error">{{ cellErrors['boiler_bins:' + rec.id] }}</span>
                 </div>
@@ -142,7 +148,7 @@
                     @keydown="handleBoilerTimeKeydown($event, rec)"
                     placeholder="08:00~18:00"
                     rows="1"
-                    :disabled="editingId !== null && editingId !== String(rec.id)"
+                    :disabled="editingId !== String(rec.id)"
                   ></textarea>
                   <span v-if="timeCellErrors['boiler:' + rec.id]" class="cell-error">{{ timeCellErrors['boiler:' + rec.id] }}</span>
                 </div>
@@ -150,20 +156,21 @@
               <td class="td-num td-count">
                 <div class="cell-input-wrap">
                   <input
-                    v-model.number="rec.boiler_blend_xz"
+                    :value="emptyAsZero(rec.boiler_blend_xz)"
+                    @input="rec.boiler_blend_xz = zeroAsEmpty($event)"
                     type="number"
                     class="cell-input cell-input--num"
                     min="0"
                     step="1"
-                    :disabled="editingId !== null && editingId !== String(rec.id)"
+                    :disabled="editingId !== String(rec.id)"
                   />
                 </div>
               </td>
               <td class="td-clickable td-num" @click="openDetail(rec, 'boiler')">
-                <span class="clickable-total">{{ rec.boiler_consumptions?.subtotal || 0 }}</span>
+                <span class="clickable-total">{{ rec.boiler_consumptions?.subtotal || '' }}</span>
               </td>
-              <td class="td-num">{{ rec.boiler_daily_total }}</td>
-              <td class="td-num">{{ rec.boiler_duration }}</td>
+              <td class="td-num">{{ rec.boiler_daily_total || '' }}</td>
+              <td class="td-num">{{ rec.boiler_duration || '' }}</td>
               <td class="td-note">
                 <div class="cell-input-wrap">
                   <input
@@ -171,7 +178,7 @@
                     class="cell-input"
                     placeholder="如：烟煤50%/焦煤30%/无烟煤20%"
                     @keydown="handleBlendMixKeydown($event, rec)"
-                    :disabled="editingId !== null && editingId !== String(rec.id)"
+                    :disabled="editingId !== String(rec.id)"
                   />
                 </div>
               </td>
@@ -184,7 +191,7 @@
                     @input="validateGasBins(rec, ($event.target as HTMLInputElement).value)"
                     @keydown="handleGasBinsKeydown($event, rec)"
                     placeholder="↑↓选择, Enter确认"
-                    :disabled="editingId !== null && editingId !== String(rec.id)"
+                    :disabled="editingId !== String(rec.id)"
                   />
                   <span v-if="gasCellErrors[rec.id]" class="cell-error">{{ gasCellErrors[rec.id] }}</span>
                 </div>
@@ -199,16 +206,16 @@
                     @keydown="handleBoilerTimeKeydown($event, rec)"
                     placeholder="↑↓选择, Enter确认"
                     rows="1"
-                    :disabled="editingId !== null && editingId !== String(rec.id)"
+                    :disabled="editingId !== String(rec.id)"
                   ></textarea>
                   <span v-if="timeCellErrors['gasification:' + rec.id]" class="cell-error">{{ timeCellErrors['gasification:' + rec.id] }}</span>
                 </div>
               </td>
               <td class="td-clickable td-num" @click="openDetail(rec, 'gasification')">
-                <span class="clickable-total">{{ rec.gasification_consumptions?.subtotal || 0 }}</span>
+                <span class="clickable-total">{{ rec.gasification_consumptions?.subtotal || '' }}</span>
               </td>
-              <td class="td-num">{{ rec.gasification_daily_total }}</td>
-              <td class="td-num">{{ rec.gasification_duration }}</td>
+              <td class="td-num">{{ rec.gasification_daily_total || '' }}</td>
+              <td class="td-num">{{ rec.gasification_duration || '' }}</td>
               <td class="td-note">
                 <div class="cell-input-wrap">
                   <textarea
@@ -218,7 +225,7 @@
                     @keydown="handleReasonKeydown($event, rec)"
                     placeholder="↑↓选择, Enter确认"
                     rows="1"
-                    :disabled="editingId !== null && editingId !== String(rec.id)"
+                    :disabled="editingId !== String(rec.id)"
                   ></textarea>
                 </div>
               </td>
@@ -231,7 +238,7 @@
                     @keydown="handleReasonKeydown($event, rec)"
                     placeholder="↑↓选择, Enter确认"
                     rows="1"
-                    :disabled="editingId !== null && editingId !== String(rec.id)"
+                    :disabled="editingId !== String(rec.id)"
                   ></textarea>
                 </div>
               </td>
@@ -245,21 +252,22 @@
                     @keydown="handleBoilerTimeKeydown($event, rec)"
                     placeholder="↑↓选择, Enter确认"
                     rows="1"
-                    :disabled="editingId !== null && editingId !== String(rec.id)"
+                    :disabled="editingId !== String(rec.id)"
                   ></textarea>
                   <span v-if="timeCellErrors['truck:' + rec.id]" class="cell-error">{{ timeCellErrors['truck:' + rec.id] }}</span>
                 </div>
               </td>
-              <td class="td-num">{{ rec.truck_unload_duration }}</td>
+              <td class="td-num">{{ rec.truck_unload_duration || '' }}</td>
               <td class="td-num td-count">
                 <div class="cell-input-wrap">
                   <input
-                    v-model.number="rec.truck_count"
+                    :value="emptyAsZero(rec.truck_count)"
+                    @input="rec.truck_count = zeroAsEmpty($event)"
                     type="number"
                     class="cell-input cell-input--num"
                     min="0"
                     step="1"
-                    :disabled="editingId !== null && editingId !== String(rec.id)"
+                    :disabled="editingId !== String(rec.id)"
                   />
                 </div>
               </td>
@@ -274,11 +282,11 @@
                 </button>
                 <button
                   v-if="isSaved(rec.id)"
-                  class="btn btn-sm btn-danger"
-                  :disabled="editingId !== null && editingId !== String(rec.id)"
-                  @click="requestDelete(rec)"
+                  class="btn btn-sm"
+                  :class="confirmingDeleteId === String(rec.id) ? 'btn-danger-confirm' : 'btn-danger'"
+                  @click="initiateDelete(rec)"
                 >
-                  删除
+                  {{ confirmingDeleteId === String(rec.id) ? '确认删除?' : '删除' }}
                 </button>
               </td>
             </tr>
@@ -441,6 +449,7 @@
 import { ref, computed, reactive, watch, onMounted, onUnmounted } from 'vue'
 import type { OperationRecord, BoilerConsumption, GasificationConsumption } from './_shared/shiftRecordStore'
 import { db } from './_shared/dbService'
+import { api } from '@/api.js'
 
 // Re-export for in-template use so the legacy type names keep working.
 export type { BoilerConsumption, GasificationConsumption }
@@ -482,6 +491,7 @@ function makeDemoSeed(): OperationRecord[] {
 // get persisted alongside the consumption data. For now they're defaulted.
 // ---------------------------------------------------------------------------
 type OperationRecordRow = OperationRecord & {
+  db_id?: string
   run_group: string
   execution_status: string
   boiler_bins: string
@@ -555,6 +565,17 @@ function handleTimeInput(rec: OperationRecordRow, field: 'boiler' | 'gasificatio
   }
   delete timeCellErrors[key]
   ;(rec as any)[t.duration] = calculateDuration(sanitized)
+}
+
+// Coercion helpers for number inputs: display '' when the field value is 0,
+// write back 0 when the user clears the field. This keeps blank new-record
+// rows from showing "0" as a placeholder in type="number" inputs.
+function emptyAsZero(v: number | string) {
+  return v === 0 ? '' : v
+}
+function zeroAsEmpty(e: Event) {
+  const v = (e.target as HTMLInputElement).value
+  return v === '' ? 0 : Number(v)
 }
 
 function validateGasBins(rec: OperationRecordRow, value: string) {
@@ -1001,43 +1022,62 @@ function confirmRunGroup(rec: OperationRecordRow) {
 // refreshTrigger bumps on every save/update so records re-reads from db.list
 const refreshTrigger = ref(0)
 
+// In-memory drafts created by the 新增 button. They show up in the table
+// without being persisted; on 保存 they go through api.createRow and are
+// dropped from this list (refreshTrigger re-emits the persisted copy).
+const newRowDrafts = ref<OperationRecordRow[]>([])
+// Ids that are soft-deleted (hidden during the 5-minute undo window). The
+// 5-minute timer eventually removes the id from this set and fires the real
+// api.deleteRow + db.remove so the row is gone for good.
+const deletedIds = reactive<Set<string>>(new Set())
+
 const records = computed<OperationRecordRow[]>(() => {
   refreshTrigger.value // pull in reactivity
   const rows = db.list<Record<string, unknown>>('operation_record_rows')
-  if (rows.length > 0) return rows.map(buildRow)
-  // fallback: demo seed (only when nothing has been confirmed)
-  return makeDemoSeed().map(withMetadata)
+  const persisted = rows.length > 0
+    ? rows.map(buildRow)
+    : makeDemoSeed().map(withMetadata)
+  // Hide rows whose localId is in the deletedIds set; drafts always appear
+  // on top so the user sees a new blank row immediately.
+  const live = [...newRowDrafts.value, ...persisted].filter(
+    r => !deletedIds.has(String(r.id))
+  )
+  return live
 })
 
 // Build an OperationRecordRow from a db row (flat camelCase → nested snake_case + metadata)
 function buildRow(row: Record<string, unknown>, idx: number): OperationRecordRow {
-  const id = `${row.recordDate}-${row.shiftBatch}`
+  const recordDate = String(row.recordDate ?? row.record_date ?? '')
+  const shiftBatch = String(row.shiftBatch ?? row.shift_batch ?? '')
+  const id = `${recordDate}-${shiftBatch}`
+  const db_id = String(row.id ?? row._id ?? id)
   const bc = (row.boilerConsumptions as BoilerConsumption | null) ?? { subtotal: 0, hl_A: 0, hl_B: 0, jz_A: 0, jz_B: 0, xz_A: 0, xz_B: 0, wn_A: 0, wn_B: 0, yl_A: 0, yl_B: 0, lx_A: 0, lx_B: 0 }
   const gc = (row.gasificationConsumptions as GasificationConsumption | null) ?? { subtotal: 0, coal_A: 0, coal_B: 0 }
   return {
     id,
-    record_date: String(row.recordDate ?? ''),
-    shift_batch: String(row.shiftBatch ?? ''),
+    db_id, // Store real database primary key
+    record_date: recordDate,
+    shift_batch: shiftBatch,
     run_group: runGroupSelections[id] ?? ['四班', '一班', '二班', '三班'][idx % 4],
-    execution_status: String(row.executionStatus ?? ''),
-    boiler_bins: String(row.boilerBins ?? ''),
-    boiler_time: String(row.boilerTime ?? ''),
-    boiler_duration: 0,
-    boiler_blend_xz: 0,
-    blend_mix: String(row.blendMix ?? ''),
-    gasification_bins: String(row.gasificationBins ?? ''),
-    gasification_time: String(row.gasificationTime ?? ''),
-    gasification_duration: 0,
+    execution_status: String(row.executionStatus ?? row.execution_status ?? ''),
+    boiler_bins: String(row.boilerBins ?? row.boiler_bins ?? ''),
+    boiler_time: String(row.boilerTime ?? row.boiler_time ?? ''),
+    boiler_duration: Number(row.boilerDuration ?? row.boiler_duration ?? 0),
+    boiler_blend_xz: Number(row.boilerBlendXz ?? row.boiler_blend_xz ?? 0),
+    blend_mix: String(row.blendMix ?? row.blend_mix ?? ''),
+    gasification_bins: String(row.gasificationBins ?? row.gasification_bins ?? ''),
+    gasification_time: String(row.gasificationTime ?? row.gasification_time ?? ''),
+    gasification_duration: Number(row.gasificationDuration ?? row.gasification_duration ?? 0),
     reason: String(row.reason ?? ''),
     remarks: String(row.remarks ?? ''),
-    truck_unload_time: String(row.truckUnloadTime ?? ''),
-    truck_unload_duration: 0,
-    truck_count: 0,
+    truck_unload_time: String(row.truckUnloadTime ?? row.truck_unload_time ?? ''),
+    truck_unload_duration: Number(row.truckUnloadDuration ?? row.truck_unload_duration ?? 0),
+    truck_count: Number(row.truckCount ?? row.truck_count ?? 0),
     boiler_consumptions: bc,
     gasification_consumptions: gc,
-    boiler_daily_total: Number(row.boilerDayTotal ?? 0),
-    gasification_daily_total: Number(row.gasificationDayTotal ?? 0),
-  }
+    boiler_daily_total: Number(row.boilerDayTotal ?? row.boiler_daily_total ?? 0),
+    gasification_daily_total: Number(row.gasificationDayTotal ?? row.gasification_daily_total ?? 0),
+  } as OperationRecordRow
 }
 
 // ---------------------------------------------------------------------------
@@ -1162,18 +1202,70 @@ function showToast(_type: 'success' | 'error' | 'info', message: string) {
 }
 
 const savingIds = reactive<Set<string>>(new Set())
-const pendingDelete = ref<{ rec: OperationRecordRow; timer: ReturnType<typeof setTimeout> } | null>(null)
+const confirmingDeleteId = ref<string | null>(null)
+let confirmResetTimer: ReturnType<typeof setTimeout> | null = null
+
+const pendingDelete = ref<{ rec: OperationRecordRow; dbId: string | null; timer: ReturnType<typeof setTimeout> } | null>(null)
+
+function initiateDelete(rec: OperationRecordRow) {
+  if (confirmingDeleteId.value === String(rec.id)) {
+    // Second click -> execute soft delete
+    confirmingDeleteId.value = null
+    if (confirmResetTimer) clearTimeout(confirmResetTimer)
+    executeSoftDelete(rec)
+  } else {
+    // First click -> show "确认删除?" warning for 3 seconds
+    confirmingDeleteId.value = String(rec.id)
+    if (confirmResetTimer) clearTimeout(confirmResetTimer)
+    confirmResetTimer = setTimeout(() => {
+      confirmingDeleteId.value = null
+    }, 3000)
+  }
+}
+
+async function executeSoftDelete(rec: OperationRecordRow) {
+  const localId = String(rec.id)
+  const dbId = savedDbIdMap.get(localId)
+  // Hide the row from the computed list immediately. We keep it in
+  // deletedIds for the 5-minute undo window. If the user undoes, undoDelete
+  // re-creates the row in db.json; otherwise the row stays gone for good.
+  deletedIds.add(localId)
+  if (dbId) {
+    try { db.remove('operation_record_rows', dbId) } catch {}
+    try { await api.deleteRow(dbId) } catch (e) {
+      console.warn('[deleteRow] backend delete failed:', e)
+    }
+  }
+  savedIds.delete(localId)
+  savedDbIdMap.delete(localId)
+  refreshTrigger.value++
+  // Re-sync savedIds so a page reload within the undo window doesn't
+  // resurrect the row from db.list() / localStorage cache.
+  await loadSavedIds()
+  pendingDelete.value = {
+    rec,
+    dbId: dbId ?? null,
+    timer: setTimeout(() => {
+      if (pendingDelete.value?.rec.id === rec.id) pendingDelete.value = null
+    }, 5 * 60 * 1000),
+  }
+  showToast('info', `已删除 · 5 分钟内可撤销`)
+}
 const editingId = ref<string | null>(null)
 const savedIds = reactive<Set<string>>(new Set())
 const savedDbIdMap = reactive<Map<string, string>>(new Map()) // localId -> db.id
 
 async function loadSavedIds() {
-  const rows = db.list('operation_record_rows')
+  const rows = db.list<Record<string, unknown>>('operation_record_rows')
   rows.forEach(row => {
-    const localId = `${row.recordDate}-${row.shiftBatch}`
+    const localId = buildLocalId(String(row.recordDate), String(row.shiftBatch))
     savedIds.add(localId)
     savedDbIdMap.set(localId, String(row.id))
   })
+}
+
+function buildLocalId(recordDate: string, shiftBatch: string) {
+  return `${recordDate}-${shiftBatch}`
 }
 
 function isSaved(id: string | number) {
@@ -1194,31 +1286,28 @@ function exitEditMode() {
   editingId.value = null
 }
 
-function requestDelete(rec: OperationRecordRow) {
-  if (!confirm(`确定要删除 ${rec.record_date} · ${rec.shift_batch} 吗？\n删除后可在 5 分钟内点击「撤销」恢复。`)) return
-  const dbId = savedDbIdMap.get(String(rec.id))
-  if (dbId) {
-    try { db.delete('operation_record_rows', dbId) } catch {}
-    savedIds.delete(String(rec.id))
-    savedDbIdMap.delete(String(rec.id))
-  }
-  // Remove from visible list
-  records.value = records.value.filter(r => String(r.id) !== String(rec.id))
-  const timer = setTimeout(() => {
-    if (pendingDelete.value?.rec.id === rec.id) pendingDelete.value = null
-  }, 5 * 60 * 1000)
-  pendingDelete.value = { rec, timer }
-  showToast('info', `已删除 · 5 分钟内可撤销`)
-}
-
-function undoDelete() {
+async function undoDelete() {
   if (!pendingDelete.value) return
   clearTimeout(pendingDelete.value.timer)
   const rec = pendingDelete.value.rec
+  const dbId = pendingDelete.value.dbId
   pendingDelete.value = null
-  // Re-add to list and restore saved state
-  const exists = records.value.find(r => String(r.id) === String(rec.id))
-  if (!exists) records.value.push(rec)
+  // The row was already deleted from db.json and dbService when the user
+  // first confirmed. To undo, we re-create the row in both stores so it
+  // reappears on the next refreshTick / page reload.
+  try {
+    if (dbId) {
+      await api.createRow(rec as unknown as Record<string, unknown>)
+    }
+  } catch (e) {
+    console.warn('[undoDelete] backend recreate failed:', e)
+  }
+  const localId = String(rec.id)
+  const restored = dbId ? { ...rec, id: dbId } : rec
+  const saved = db.create('operation_record_rows', restored)
+  savedIds.add(localId)
+  savedDbIdMap.set(localId, String(saved.id))
+  deletedIds.delete(localId)
   refreshTrigger.value++
   showToast('success', `已撤销删除`)
 }
@@ -1259,22 +1348,35 @@ async function saveRecord(rec: OperationRecordRow) {
       boilerBlendXz: rec.boiler_blend_xz || null,
       boilerShiftTotal: rec.boiler_consumptions?.subtotal || null,
       boilerDayTotal: rec.boiler_daily_total || null,
+      boilerConsumptions: rec.boiler_consumptions || null,
       blendMix: rec.blend_mix || null,
       gasificationBins: rec.gasification_bins || null,
       gasificationTime: rec.gasification_time || null,
       gasificationDuration: rec.gasification_duration || null,
       gasificationShiftTotal: rec.gasification_consumptions?.subtotal || null,
       gasificationDayTotal: rec.gasification_daily_total || null,
+      gasificationConsumptions: rec.gasification_consumptions || null,
       reason: rec.reason || null,
       remarks: rec.remarks || null,
       truckUnloadTime: rec.truck_unload_time || null,
       truckUnloadDuration: rec.truck_unload_duration || null,
       truckCount: rec.truck_count || null,
     }
-    db.create('operation_record_rows', payload)
-    const localId = String(rec.id)
+    const created = await api.createRow(payload)
+    // Sync with local dbService so db.list() contains the new record.
+    // Pass the record with its server-assigned id so db.create() preserves it.
+    const saved = db.create('operation_record_rows', { id: created?.id, ...payload })
+    // Promote the row's id from the temporary "new:..." draft to the
+    // canonical localId so subsequent isSaved() / savedDbIdMap lookups match
+    // the keys built by loadSavedIds() (i.e. `${recordDate}-${shiftBatch}`).
+    const localId = buildLocalId(rec.record_date, rec.shift_batch)
     savedIds.add(localId)
-    if (payload.id) savedDbIdMap.set(localId, String(payload.id))
+    savedDbIdMap.set(localId, String(saved.id))
+    // Also index the original draft id so any stale references in savingIds
+    // don't get stuck forever, and drop the in-memory draft so we don't
+    // double-show the row during the refreshTick window.
+    savingIds.delete(String(rec.id))
+    newRowDrafts.value = newRowDrafts.value.filter(d => String(d.id) !== String(rec.id))
     refreshTrigger.value++
     showToast('success', `${rec.record_date} · ${rec.shift_batch} 已保存到数据库`)
   } catch (e) {
@@ -1304,19 +1406,21 @@ async function updateRecord(rec: OperationRecordRow) {
       boilerBlendXz: rec.boiler_blend_xz || null,
       boilerShiftTotal: rec.boiler_consumptions?.subtotal || null,
       boilerDayTotal: rec.boiler_daily_total || null,
+      boilerConsumptions: rec.boiler_consumptions || null,
       blendMix: rec.blend_mix || null,
       gasificationBins: rec.gasification_bins || null,
       gasificationTime: rec.gasification_time || null,
       gasificationDuration: rec.gasification_duration || null,
       gasificationShiftTotal: rec.gasification_consumptions?.subtotal || null,
       gasificationDayTotal: rec.gasification_daily_total || null,
+      gasificationConsumptions: rec.gasification_consumptions || null,
       reason: rec.reason || null,
       remarks: rec.remarks || null,
       truckUnloadTime: rec.truck_unload_time || null,
       truckUnloadDuration: rec.truck_unload_duration || null,
       truckCount: rec.truck_count || null,
     }
-    db.update('operation_record_rows', dbId, payload)
+    await api.updateRow(dbId, payload)
     refreshTrigger.value++
     showToast('success', `${rec.record_date} · ${rec.shift_batch} 已更新`)
   } catch (e) {
@@ -1330,6 +1434,51 @@ function handleSearch() {
   isDefaultView.value = false
   filterDate.value = filterDate.value // force reactivity
   console.log('[Search] date=', filterDate.value, 'shift=', filterShift.value)
+}
+
+function handleCreate() {
+  // Draft id uses a "new:" prefix so it can't collide with persisted ids
+  // (those are `${recordDate}-${shiftBatch}`). The 完成 button on this row
+  // will dispatch into saveRecord, which calls api.createRow.
+  const draftId = `new:${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+  const emptyBoiler: BoilerConsumption = {
+    subtotal: 0, hl_A: 0, hl_B: 0, jz_A: 0, jz_B: 0,
+    xz_A: 0, xz_B: 0, wn_A: 0, wn_B: 0,
+    yl_A: 0, yl_B: 0, lx_A: 0, lx_B: 0,
+  }
+  const emptyGas: GasificationConsumption = { subtotal: 0, coal_A: 0, coal_B: 0 }
+  const draft: OperationRecordRow = {
+    id: draftId,
+    record_date: toLocalDateString(new Date()),
+    shift_batch: '白班',
+    run_group: runGroupSelections[draftId] ?? '一班',
+    execution_status: '',
+    boiler_bins: '',
+    boiler_time: '',
+    boiler_duration: 0,
+    boiler_blend_xz: 0,
+    blend_mix: '',
+    gasification_bins: '',
+    gasification_time: '',
+    gasification_duration: 0,
+    reason: '',
+    remarks: '',
+    truck_unload_time: '',
+    truck_unload_duration: 0,
+    truck_count: 0,
+    boiler_consumptions: emptyBoiler,
+    gasification_consumptions: emptyGas,
+    boiler_daily_total: 0,
+    gasification_daily_total: 0,
+  }
+  newRowDrafts.value = [draft, ...newRowDrafts.value]
+  // Enter edit mode on the draft so the user can immediately start filling it.
+  editingId.value = String(draft.id)
+  // Reset pagination so the new row is visible without scrolling.
+  currentPage.value = 1
+  // Clear default-view filter so the new draft isn't hidden behind it.
+  isDefaultView.value = false
+  refreshTrigger.value++
 }
 
 function resetToDefault() {
@@ -1431,6 +1580,22 @@ function getShiftKey(shift: string): string {
   flex-wrap: wrap;
 }
 
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar-actions--primary {
+  padding-left: 4px;
+  border-left: 2px solid #e2e8f0;
+  margin-left: 4px;
+}
+
+.toolbar-actions--secondary {
+  margin-left: auto;
+}
+
 .filter-group {
   display: flex;
   align-items: center;
@@ -1486,6 +1651,17 @@ function getShiftKey(shift: string): string {
   border-color: #1d4ed8;
 }
 
+.btn-accent {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff;
+  border-color: #059669;
+}
+
+.btn-accent:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  border-color: #047857;
+}
+
 .btn-secondary {
   background: #ffffff;
   color: #1e3a5f;
@@ -1506,6 +1682,23 @@ function getShiftKey(shift: string): string {
 .btn-danger:hover {
   background: #fef2f2;
   border-color: #dc2626;
+}
+
+.btn-danger-confirm {
+  background: #dc2626;
+  color: #ffffff;
+  border-color: #dc2626;
+  animation: pulse-danger 0.6s ease-in-out infinite alternate;
+}
+
+.btn-danger-confirm:hover {
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
+
+@keyframes pulse-danger {
+  from { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
+  to { box-shadow: 0 0 0 4px rgba(220, 38, 38, 0); }
 }
 
 .btn-warning {
@@ -2221,6 +2414,13 @@ function getShiftKey(shift: string): string {
   .toolbar-filters {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .toolbar-actions--primary,
+  .toolbar-actions--secondary {
+    margin-left: 0;
+    border-left: 0;
+    padding-left: 0;
   }
 
   .modal-overlay {

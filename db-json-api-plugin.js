@@ -16,7 +16,7 @@ function writeDb(data) {
 }
 
 function tableKey(table) {
-  return `${table}_rows`
+  return table
 }
 
 export default function dbJsonApiPlugin() {

@@ -112,7 +112,7 @@ export const db = {
   },
 
   create<T extends DbRow = DbRow>(table: TableName, data: Omit<T, 'id'>): T {
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+    const id = (data as DbRow).id ?? (data as DbRow).__id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
     const row: DbRow = { ...data, id, updatedAt: Date.now() }
     tables.get(table)?.push(row)
     persist()
@@ -130,10 +130,11 @@ export const db = {
 
   remove(table: TableName, id: string): boolean {
     const rows = tables.get(table) ?? []
-    const before = rows.length
-    tables.set(table, rows.filter(r => r.id !== id && r.__id !== id))
-    if (rows.length < before) { persist(); return true }
-    return false
+    const next = rows.filter(r => r.id !== id && r.__id !== id)
+    if (next.length === rows.length) return false
+    tables.set(table, next)
+    persist()
+    return true
   },
 
   clear(table: TableName): void {
