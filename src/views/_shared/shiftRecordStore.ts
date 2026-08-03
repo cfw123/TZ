@@ -1,4 +1,4 @@
-import { reactive, watch } from 'vue'
+import { reactive } from 'vue'
 import { db } from './dbService'
 
 // ---------------------------------------------------------------------------
@@ -32,6 +32,27 @@ export interface ShiftPayload {
   shift_batch: string
   boiler_consumptions: BoilerConsumption
   gasification_consumptions: GasificationConsumption
+  /** Operational metadata (run-group, bins, time, etc.) merged in from
+   *  OperationRecordView so they survive a confirmShiftRow round-trip.
+   *  undefined fields are omitted (preserve existing); null fields are written
+   *  as null (clear the field). */
+  metadata?: {
+    runGroup?: string | null
+    executionStatus?: string | null
+    boilerBins?: string | null
+    boilerTime?: string | null
+    boilerDuration?: number | null
+    boilerBlendXz?: number | null
+    blendMix?: string | null
+    gasificationBins?: string | null
+    gasificationTime?: string | null
+    gasificationDuration?: number | null
+    reason?: string | null
+    remarks?: string | null
+    truckUnloadTime?: string | null
+    truckUnloadDuration?: number | null
+    truckCount?: number | null
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -55,7 +76,7 @@ export interface OperationRecord {
 // ---------------------------------------------------------------------------
 export const shiftRecordStore = reactive<ShiftPayload[]>([])
 
-export function upsertShiftRecord(payload: ShiftPayload): void {
+export function upsertShiftRecord(payload: ShiftPayload): string | undefined {
   const idx = shiftRecordStore.findIndex(
     p => p.record_date === payload.record_date && p.shift_batch === payload.shift_batch
   )
@@ -64,16 +85,48 @@ export function upsertShiftRecord(payload: ShiftPayload): void {
   } else {
     shiftRecordStore.push(payload)
   }
-  // Persist to dbService so changes survive page refresh
-  const existing = db.list('operation_record_rows')
+  // Persist to dbService so changes survive page refresh.
+  // On update: merge with the existing row so metadata from
+  // OperationRecordView.updateRecord (executionStatus, runGroup, bins, …)
+  // is not destroyed by a consumption-only confirmShiftRow payload.
+  const existing = db.list<Record<string, unknown>>('operation_record_rows')
   const row = existing.find(r =>
-    r.recordDate === payload.record_date && r.shiftBatch === payload.shift_batch
+    String(r.recordDate ?? '') === payload.record_date &&
+    String(r.shiftBatch ?? '') === payload.shift_batch
   )
-  const dbRow = buildDbRow(payload)
+  const baseRow = row ? { ...row } : {}
+  // Build a flat db row: consumption + any provided metadata, all camelCase.
+  const m = payload.metadata ?? {}
+  const dbRow: Record<string, unknown> = {
+    ...baseRow,
+    recordDate: payload.record_date,
+    shiftBatch: payload.shift_batch,
+    // Consumption — nested object (read by buildRow / initShiftRecordStore).
+    boilerConsumptions: payload.boiler_consumptions,
+    gasificationConsumptions: payload.gasification_consumptions,
+    // Flattened metadata — mirrors the fields that updateRecord writes to db.json.
+    runGroup: m.runGroup ?? null,
+    executionStatus: m.executionStatus ?? null,
+    boilerBins: m.boilerBins ?? null,
+    boilerTime: m.boilerTime ?? null,
+    boilerDuration: m.boilerDuration ?? null,
+    boilerBlendXz: m.boilerBlendXz ?? null,
+    blendMix: m.blendMix ?? null,
+    gasificationBins: m.gasificationBins ?? null,
+    gasificationTime: m.gasificationTime ?? null,
+    gasificationDuration: m.gasificationDuration ?? null,
+    reason: m.reason ?? null,
+    remarks: m.remarks ?? null,
+    truckUnloadTime: m.truckUnloadTime ?? null,
+    truckUnloadDuration: m.truckUnloadDuration ?? null,
+    truckCount: m.truckCount ?? null,
+  }
   if (row?.id) {
-    db.update('operation_record_rows', row.id, dbRow)
+    db.update('operation_record_rows', String(row.id), dbRow)
+    return String(row.id)
   } else {
-    db.create('operation_record_rows', dbRow)
+    const saved = db.create('operation_record_rows', dbRow)
+    return String(saved.id)
   }
 }
 
@@ -127,18 +180,6 @@ const SHIFT_ORDER: Record<string, number> = {
   '大夜班': 0,
   '白班': 1,
   '小夜班': 2,
-}
-
-// ---------------------------------------------------------------------------
-// Build a db row from a ShiftPayload (nested → flat camelCase for db.json)
-// ---------------------------------------------------------------------------
-function buildDbRow(payload: ShiftPayload): Record<string, unknown> {
-  return {
-    recordDate: payload.record_date,
-    shiftBatch: payload.shift_batch,
-    boilerConsumptions: payload.boiler_consumptions,
-    gasificationConsumptions: payload.gasification_consumptions,
-  }
 }
 
 // ---------------------------------------------------------------------------

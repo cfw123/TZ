@@ -96,9 +96,30 @@
                 'record-row--locked': editingId !== null && editingId !== String(rec.id),
               }"
             >
-              <td class="td-sticky td-sticky--1">{{ rec.record_date }}</td>
+              <td class="td-sticky td-sticky--1">
+                <input
+                  v-if="isNewDraft(rec.id) && editingId === String(rec.id)"
+                  v-model="rec.record_date"
+                  type="date"
+                  class="cell-input"
+                />
+                <template v-else>{{ rec.record_date }}</template>
+              </td>
               <td class="td-sticky td-sticky--2">
-                <span class="shift-badge" :class="`shift-badge--${getShiftKey(rec.shift_batch)}`">
+                <select
+                  v-if="isNewDraft(rec.id) && editingId === String(rec.id)"
+                  v-model="rec.shift_batch"
+                  class="cell-input"
+                >
+                  <option value="白班">白班</option>
+                  <option value="小夜班">小夜班</option>
+                  <option value="大夜班">大夜班</option>
+                </select>
+                <span
+                  v-else
+                  class="shift-badge"
+                  :class="`shift-badge--${getShiftKey(rec.shift_batch)}`"
+                >
                   {{ rec.shift_batch }}
                 </span>
               </td>
@@ -169,8 +190,32 @@
               <td class="td-clickable td-num" @click="openDetail(rec, 'boiler')">
                 <span class="clickable-total">{{ rec.boiler_consumptions?.subtotal || '' }}</span>
               </td>
-              <td class="td-num">{{ rec.boiler_daily_total || '' }}</td>
-              <td class="td-num">{{ rec.boiler_duration || '' }}</td>
+              <td class="td-num">
+                <input
+                  v-if="editingId === String(rec.id)"
+                  :value="emptyAsZero(rec.boiler_daily_total)"
+                  @input="rec.boiler_daily_total = zeroAsEmpty($event)"
+                  type="number"
+                  class="cell-input cell-input--num"
+                  min="0"
+                  step="1"
+                  :disabled="editingId !== String(rec.id)"
+                />
+                <template v-else>{{ rec.boiler_daily_total || '' }}</template>
+              </td>
+              <td class="td-num">
+                <input
+                  v-if="editingId === String(rec.id)"
+                  :value="emptyAsZero(rec.boiler_duration)"
+                  @input="rec.boiler_duration = zeroAsEmpty($event)"
+                  type="number"
+                  class="cell-input cell-input--num"
+                  min="0"
+                  step="1"
+                  :disabled="editingId !== String(rec.id)"
+                />
+                <template v-else>{{ rec.boiler_duration || '' }}</template>
+              </td>
               <td class="td-note">
                 <div class="cell-input-wrap">
                   <input
@@ -214,8 +259,32 @@
               <td class="td-clickable td-num" @click="openDetail(rec, 'gasification')">
                 <span class="clickable-total">{{ rec.gasification_consumptions?.subtotal || '' }}</span>
               </td>
-              <td class="td-num">{{ rec.gasification_daily_total || '' }}</td>
-              <td class="td-num">{{ rec.gasification_duration || '' }}</td>
+              <td class="td-num">
+                <input
+                  v-if="editingId === String(rec.id)"
+                  :value="emptyAsZero(rec.gasification_daily_total)"
+                  @input="rec.gasification_daily_total = zeroAsEmpty($event)"
+                  type="number"
+                  class="cell-input cell-input--num"
+                  min="0"
+                  step="1"
+                  :disabled="editingId !== String(rec.id)"
+                />
+                <template v-else>{{ rec.gasification_daily_total || '' }}</template>
+              </td>
+              <td class="td-num">
+                <input
+                  v-if="editingId === String(rec.id)"
+                  :value="emptyAsZero(rec.gasification_duration)"
+                  @input="rec.gasification_duration = zeroAsEmpty($event)"
+                  type="number"
+                  class="cell-input cell-input--num"
+                  min="0"
+                  step="1"
+                  :disabled="editingId !== String(rec.id)"
+                />
+                <template v-else>{{ rec.gasification_duration || '' }}</template>
+              </td>
               <td class="td-note">
                 <div class="cell-input-wrap">
                   <textarea
@@ -257,7 +326,19 @@
                   <span v-if="timeCellErrors['truck:' + rec.id]" class="cell-error">{{ timeCellErrors['truck:' + rec.id] }}</span>
                 </div>
               </td>
-              <td class="td-num">{{ rec.truck_unload_duration || '' }}</td>
+              <td class="td-num">
+                <input
+                  v-if="editingId === String(rec.id)"
+                  :value="emptyAsZero(rec.truck_unload_duration)"
+                  @input="rec.truck_unload_duration = zeroAsEmpty($event)"
+                  type="number"
+                  class="cell-input cell-input--num"
+                  min="0"
+                  step="1"
+                  :disabled="editingId !== String(rec.id)"
+                />
+                <template v-else>{{ rec.truck_unload_duration || '' }}</template>
+              </td>
               <td class="td-num td-count">
                 <div class="cell-input-wrap">
                   <input
@@ -315,120 +396,16 @@
             <button class="modal-close" @click="closeDetail" aria-label="关闭">×</button>
           </div>
 
-          <div class="modal-body" v-if="selectedRecord">
-            <!-- Boiler Consumption Section -->
-            <section class="detail-section" v-if="modalType === 'boiler'">
-              <div class="detail-section__title">
-                <span class="section-icon">🔥</span>
-                <span>锅炉消耗明细</span>
-              </div>
-              <div class="detail-grid" v-if="selectedRecord.boiler_consumptions">
-                <div class="detail-item detail-item--highlight">
-                  <span class="detail-label">小计</span>
-                  <span class="detail-value detail-value--strong">
-                    {{ selectedRecord.boiler_consumptions.subtotal }}
-                  </span>
-                </div>
-                <div class="detail-item" v-if="selectedRecord.boiler_consumptions.hl_A">
-                  <span class="detail-label">黄陵混合煤 - A仓 (hl_A)</span>
-                  <span class="detail-value">{{ selectedRecord.boiler_consumptions.hl_A }}</span>
-                </div>
-                <div class="detail-item" v-if="selectedRecord.boiler_consumptions.hl_B">
-                  <span class="detail-label">黄陵混合煤 - B仓 (hl_B)</span>
-                  <span class="detail-value">{{ selectedRecord.boiler_consumptions.hl_B }}</span>
-                </div>
-                <div class="detail-item" v-if="selectedRecord.boiler_consumptions.jz_A">
-                  <span class="detail-label">建庄大块煤 - A仓 (jz_A)</span>
-                  <span class="detail-value">{{ selectedRecord.boiler_consumptions.jz_A }}</span>
-                </div>
-                <div class="detail-item" v-if="selectedRecord.boiler_consumptions.jz_B">
-                  <span class="detail-label">建庄大块煤 - B仓 (jz_B)</span>
-                  <span class="detail-value">{{ selectedRecord.boiler_consumptions.jz_B }}</span>
-                </div>
-                <div class="detail-item" v-if="selectedRecord.boiler_consumptions.xz_A">
-                  <span class="detail-label">细渣煤 - A仓 (xz_A)</span>
-                  <span class="detail-value">{{ selectedRecord.boiler_consumptions.xz_A }}</span>
-                </div>
-                <div class="detail-item" v-if="selectedRecord.boiler_consumptions.xz_B">
-                  <span class="detail-label">细渣煤 - B仓 (xz_B)</span>
-                  <span class="detail-value">{{ selectedRecord.boiler_consumptions.xz_B }}</span>
-                </div>
-                <div class="detail-item detail-item--sludge" v-if="selectedRecord.boiler_consumptions.wn_A">
-                  <span class="detail-label detail-label--sludge">
-                    ⚠ 污泥 - A仓 (wn_A) · 隔离核算
-                  </span>
-                  <span class="detail-value detail-value--sludge">
-                    {{ selectedRecord.boiler_consumptions.wn_A }}
-                  </span>
-                </div>
-                <div class="detail-item detail-item--sludge" v-if="selectedRecord.boiler_consumptions.wn_B">
-                  <span class="detail-label detail-label--sludge">
-                    ⚠ 污泥 - B仓 (wn_B) · 隔离核算
-                  </span>
-                  <span class="detail-value detail-value--sludge">
-                    {{ selectedRecord.boiler_consumptions.wn_B }}
-                  </span>
-                </div>
-                <div class="detail-item" v-if="selectedRecord.boiler_consumptions.yl_A">
-                  <span class="detail-label">原料煤 - A仓 </span>
-                  <span class="detail-value">{{ selectedRecord.boiler_consumptions.yl_A }}</span>
-                </div>
-                <div class="detail-item" v-if="selectedRecord.boiler_consumptions.yl_B">
-                  <span class="detail-label">原料煤 - B仓 </span>
-                  <span class="detail-value">{{ selectedRecord.boiler_consumptions.yl_B }}</span>
-                </div>
-                <div class="detail-item" v-if="selectedRecord.boiler_consumptions.lx_A">
-                  <span class="detail-label">离心煤 - A仓 (lx_A)</span>
-                  <span class="detail-value">{{ selectedRecord.boiler_consumptions.lx_A }}</span>
-                </div>
-                <div class="detail-item" v-if="selectedRecord.boiler_consumptions.lx_B">
-                  <span class="detail-label">离心煤 - B仓 (lx_B)</span>
-                  <span class="detail-value">{{ selectedRecord.boiler_consumptions.lx_B }}</span>
-                </div>
-              </div>
-              <div v-else class="empty-state">无锅炉消耗数据</div>
-            </section>
-
-            <!-- Gasification Consumption Section -->
-            <section class="detail-section" v-if="modalType === 'gasification'">
-              <div class="detail-section__title">
-                <span class="section-icon">💨</span>
-                <span>气化消耗明细</span>
-              </div>
-              <div class="bins-edit-row">
-                <div class="bins-edit-cell">
-                  <span class="bins-edit-label">气化运行筒仓</span>
-                  <input
-                    v-model="selectedRecord!.gasification_bins"
-                    class="cell-input"
-                    :class="{ 'cell-input--error': selectedRecord && gasCellErrors[String(selectedRecord.id)], 'cell-input--success': selectedRecord && !gasCellErrors[String(selectedRecord.id)] && selectedRecord.gasification_bins }"
-                    @input="selectedRecord && validateGasBins(selectedRecord, ($event.target as HTMLInputElement).value)"
-                  />
-                  <span v-if="selectedRecord && gasCellErrors[String(selectedRecord.id)]" class="cell-error">{{ gasCellErrors[String(selectedRecord.id)] }}</span>
-                </div>
-                <div class="bins-edit-cell">
-                  <span class="bins-edit-label">气化上煤时间</span>
-                  <input v-model="selectedRecord!.gasification_time" class="cell-input" />
-                </div>
-              </div>
-              <div class="detail-grid" v-if="selectedRecord.gasification_consumptions">
-                <div class="detail-item detail-item--highlight">
-                  <span class="detail-label">小计</span>
-                  <span class="detail-value detail-value--strong">
-                    {{ selectedRecord.gasification_consumptions.subtotal }}
-                  </span>
-                </div>
-                <div class="detail-item" v-if="selectedRecord.gasification_consumptions.coal_A">
-                  <span class="detail-label">A仓原料煤 (coal_A)</span>
-                  <span class="detail-value">{{ selectedRecord.gasification_consumptions.coal_A }}</span>
-                </div>
-                <div class="detail-item" v-if="selectedRecord.gasification_consumptions.coal_B">
-                  <span class="detail-label">B仓原料煤 (coal_B)</span>
-                  <span class="detail-value">{{ selectedRecord.gasification_consumptions.coal_B }}</span>
-                </div>
-              </div>
-              <div v-else class="empty-state">无气化消耗数据</div>
-            </section>
+          <div class="modal-body modal-body--embedded" v-if="selectedRecord">
+            <!-- Embed the DailyConsumption ledger so operators can edit A/B silo
+                 breakdowns (incl. isolated sludge wn_A/wn_B). It saves via
+                 upsertShiftRecord → db.list('operation_record_rows'), the same
+                 store this view reads from; closeDetail() bumps refreshTrigger
+                 so the table picks up the new values. -->
+            <DailyConsumption
+              :initial-date="selectedRecord.record_date"
+              @shift-confirmed="onLedgerShiftConfirmed"
+            />
           </div>
 
           <div class="modal-footer">
@@ -450,6 +427,8 @@ import { ref, computed, reactive, watch, onMounted, onUnmounted } from 'vue'
 import type { OperationRecord, BoilerConsumption, GasificationConsumption } from './_shared/shiftRecordStore'
 import { db } from './_shared/dbService'
 import { api } from '@/api.js'
+import { upsertShiftRecord } from './_shared/shiftRecordStore'
+import DailyConsumption from './DailyConsumption.vue'
 
 // Re-export for in-template use so the legacy type names keep working.
 export type { BoilerConsumption, GasificationConsumption }
@@ -1173,9 +1152,44 @@ function openDetail(rec: OperationRecordRow, type: 'boiler' | 'gasification') {
 }
 
 function closeDetail() {
+  // Push the operational metadata (run-group, bins, time, duration, reason, …)
+  // back into shiftRecordStore so the next confirmShiftRow in DailyConsumption
+  // preserves it through upsertShiftRecord → db.update (metadata is now merged).
+  if (selectedRecord.value) {
+    upsertShiftRecord({
+      record_date: selectedRecord.value.record_date,
+      shift_batch: selectedRecord.value.shift_batch,
+      boiler_consumptions: selectedRecord.value.boiler_consumptions,
+      gasification_consumptions: selectedRecord.value.gasification_consumptions,
+      metadata: {
+        runGroup: selectedRecord.value.run_group,
+        executionStatus: selectedRecord.value.execution_status,
+        boilerBins: selectedRecord.value.boiler_bins,
+        boilerTime: selectedRecord.value.boiler_time,
+        boilerDuration: selectedRecord.value.boiler_duration,
+        boilerBlendXz: selectedRecord.value.boiler_blend_xz,
+        blendMix: selectedRecord.value.blend_mix,
+        gasificationBins: selectedRecord.value.gasification_bins,
+        gasificationTime: selectedRecord.value.gasification_time,
+        gasificationDuration: selectedRecord.value.gasification_duration,
+        reason: selectedRecord.value.reason,
+        remarks: selectedRecord.value.remarks,
+        truckUnloadTime: selectedRecord.value.truck_unload_time,
+        truckUnloadDuration: selectedRecord.value.truck_unload_duration,
+        truckCount: selectedRecord.value.truck_count,
+      },
+    })
+  }
   showModal.value = false
   selectedRecord.value = null
   modalType.value = null
+  refreshTrigger.value++
+}
+
+/** Fired when DailyConsumption confirms a shift — bumps refreshTrigger so the
+ *  parent table immediately shows the newly saved subtotal for that batch. */
+function onLedgerShiftConfirmed(_payload: { record_date: string; shift_batch: string; type: 'boiler' | 'gasification' }) {
+  refreshTrigger.value++
 }
 
 function onModalKeydown(e: KeyboardEvent) {
@@ -1272,6 +1286,10 @@ function isSaved(id: string | number) {
   return savedIds.has(String(id))
 }
 
+function isNewDraft(id: string | number): boolean {
+  return String(id).startsWith('new:')
+}
+
 function startEdit(id: string) {
   if (editingId.value !== null) {
     const prevId = editingId.value
@@ -1303,10 +1321,33 @@ async function undoDelete() {
     console.warn('[undoDelete] backend recreate failed:', e)
   }
   const localId = String(rec.id)
-  const restored = dbId ? { ...rec, id: dbId } : rec
-  const saved = db.create('operation_record_rows', restored)
+  // upsertShiftRecord handles both db.create (new row) and db.update (existing row),
+  // and also syncs shiftRecordStore in one shot.
+  const dbRowId = upsertShiftRecord({
+    record_date: rec.record_date,
+    shift_batch: rec.shift_batch,
+    boiler_consumptions: rec.boiler_consumptions,
+    gasification_consumptions: rec.gasification_consumptions,
+    metadata: {
+      runGroup: rec.run_group,
+      executionStatus: rec.execution_status,
+      boilerBins: rec.boiler_bins,
+      boilerTime: rec.boiler_time,
+      boilerDuration: rec.boiler_duration,
+      boilerBlendXz: rec.boiler_blend_xz,
+      blendMix: rec.blend_mix,
+      gasificationBins: rec.gasification_bins,
+      gasificationTime: rec.gasification_time,
+      gasificationDuration: rec.gasification_duration,
+      reason: rec.reason,
+      remarks: rec.remarks,
+      truckUnloadTime: rec.truck_unload_time,
+      truckUnloadDuration: rec.truck_unload_duration,
+      truckCount: rec.truck_count,
+    },
+  })
   savedIds.add(localId)
-  savedDbIdMap.set(localId, String(saved.id))
+  if (dbRowId) savedDbIdMap.set(localId, dbRowId)
   deletedIds.delete(localId)
   refreshTrigger.value++
   showToast('success', `已撤销删除`)
@@ -1363,15 +1404,39 @@ async function saveRecord(rec: OperationRecordRow) {
       truckCount: rec.truck_count || null,
     }
     const created = await api.createRow(payload)
-    // Sync with local dbService so db.list() contains the new record.
-    // Pass the record with its server-assigned id so db.create() preserves it.
-    const saved = db.create('operation_record_rows', { id: created?.id, ...payload })
+    // Single write to local db via upsertShiftRecord — this:
+    //   1. syncs shiftRecordStore so the embedded DailyConsumption sees the row
+    //   2. writes to db.list with all metadata fields (mirroring updateRecord's payload)
+    //   3. returns the db id so savedDbIdMap can be updated
+    const dbRowId = upsertShiftRecord({
+      record_date: rec.record_date,
+      shift_batch: rec.shift_batch,
+      boiler_consumptions: rec.boiler_consumptions ?? { subtotal: 0, hl_A: 0, hl_B: 0, jz_A: 0, jz_B: 0, xz_A: 0, xz_B: 0, wn_A: 0, wn_B: 0, yl_A: 0, yl_B: 0, lx_A: 0, lx_B: 0 },
+      gasification_consumptions: rec.gasification_consumptions ?? { subtotal: 0, coal_A: 0, coal_B: 0 },
+      metadata: {
+        runGroup: rec.run_group || undefined,
+        executionStatus: rec.execution_status || undefined,
+        boilerBins: rec.boiler_bins || undefined,
+        boilerTime: rec.boiler_time || undefined,
+        boilerDuration: rec.boiler_duration || undefined,
+        boilerBlendXz: rec.boiler_blend_xz || undefined,
+        blendMix: rec.blend_mix || undefined,
+        gasificationBins: rec.gasification_bins || undefined,
+        gasificationTime: rec.gasification_time || undefined,
+        gasificationDuration: rec.gasification_duration || undefined,
+        reason: rec.reason || undefined,
+        remarks: rec.remarks || undefined,
+        truckUnloadTime: rec.truck_unload_time || undefined,
+        truckUnloadDuration: rec.truck_unload_duration || undefined,
+        truckCount: rec.truck_count || undefined,
+      },
+    })
     // Promote the row's id from the temporary "new:..." draft to the
     // canonical localId so subsequent isSaved() / savedDbIdMap lookups match
     // the keys built by loadSavedIds() (i.e. `${recordDate}-${shiftBatch}`).
     const localId = buildLocalId(rec.record_date, rec.shift_batch)
     savedIds.add(localId)
-    savedDbIdMap.set(localId, String(saved.id))
+    if (dbRowId) savedDbIdMap.set(localId, dbRowId)
     // Also index the original draft id so any stale references in savingIds
     // don't get stuck forever, and drop the in-memory draft so we don't
     // double-show the row during the refreshTick window.
@@ -1421,6 +1486,31 @@ async function updateRecord(rec: OperationRecordRow) {
       truckCount: rec.truck_count || null,
     }
     await api.updateRow(dbId, payload)
+    // Keep shiftRecordStore in sync so the embedded DailyConsumption
+    // sees the latest metadata when the modal is next opened.
+    upsertShiftRecord({
+      record_date: rec.record_date,
+      shift_batch: rec.shift_batch,
+      boiler_consumptions: rec.boiler_consumptions,
+      gasification_consumptions: rec.gasification_consumptions,
+      metadata: {
+        runGroup: rec.run_group,
+        executionStatus: rec.execution_status,
+        boilerBins: rec.boiler_bins,
+        boilerTime: rec.boiler_time,
+        boilerDuration: rec.boiler_duration,
+        boilerBlendXz: rec.boiler_blend_xz,
+        blendMix: rec.blend_mix,
+        gasificationBins: rec.gasification_bins,
+        gasificationTime: rec.gasification_time,
+        gasificationDuration: rec.gasification_duration,
+        reason: rec.reason,
+        remarks: rec.remarks,
+        truckUnloadTime: rec.truck_unload_time,
+        truckUnloadDuration: rec.truck_unload_duration,
+        truckCount: rec.truck_count,
+      },
+    })
     refreshTrigger.value++
     showToast('success', `${rec.record_date} · ${rec.shift_batch} 已更新`)
   } catch (e) {
@@ -2252,6 +2342,19 @@ function getShiftKey(shift: string): string {
   min-height: 0;
   overscroll-behavior: contain;
 }
+
+/* Embedded DailyConsumption view overrides — keeps the ledger from forcing
+   the modal to viewport-height. The view's own .view-container gets a
+   stripped chrome (no outer padding/title) inside the modal. */
+.modal-body--embedded {
+  padding: 0;
+}
+.modal-body--embedded :deep(.view-container) {
+  padding: 0;
+  min-height: auto;
+}
+.modal-body--embedded :deep(.view-title) { display: none; }
+.modal-body--embedded :deep(.toolbar) { padding: 12px 16px 8px; }
 
 /* Modal body scrollbar */
 .modal-body::-webkit-scrollbar {

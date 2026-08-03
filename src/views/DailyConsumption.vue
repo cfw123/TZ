@@ -78,7 +78,6 @@
               >
                 <span class="th-silo-dot" :class="col.disabled ? 'silo-dot--muted' : col.sub === '_A' ? 'silo-dot--a' : 'silo-dot--b'"></span>{{ col.label }}
               </th>
-              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -107,7 +106,17 @@
                 />
               </td>
               <td>
-                <button v-if="row.batch !== '总计'" class="btn btn-primary" style="height: 26px; padding: 0 10px; font-size: 12px;" @click="confirmShiftRow(row.batch)">确认</button>
+                <template v-if="row.batch !== '总计'">
+                  <button
+                    v-if="!isBatchConfirmed('boiler', row.batch)"
+                    class="btn btn-primary btn-confirm"
+                    @click="confirmShiftRow('boiler', row.batch)"
+                  >确认</button>
+                  <div v-else class="confirmed-row">
+                    <span class="confirmed-badge">已确认</span>
+                    <button class="btn btn-edit" @click="unlockBatch('boiler', row.batch)">编辑</button>
+                  </div>
+                </template>
               </td>
             </tr>
           </tbody>
@@ -150,7 +159,17 @@
                 <input class="cell-input" v-model="row.coal_B" @input="onGasCellInput(row)" @focus="e => (e.target as HTMLInputElement).select()" />
               </td>
               <td>
-                <button v-if="row.batch !== '总计'" class="btn btn-primary" style="height: 26px; padding: 0 10px; font-size: 12px;" @click="confirmShiftRow(row.batch)">确认</button>
+                <template v-if="row.batch !== '总计'">
+                  <button
+                    v-if="!isBatchConfirmed('gasification', row.batch)"
+                    class="btn btn-primary btn-confirm"
+                    @click="confirmShiftRow('gasification', row.batch)"
+                  >确认</button>
+                  <div v-else class="confirmed-row">
+                    <span class="confirmed-badge">已确认</span>
+                    <button class="btn btn-edit" @click="unlockBatch('gasification', row.batch)">编辑</button>
+                  </div>
+                </template>
               </td>
             </tr>
           </tbody>
@@ -174,8 +193,32 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch } from 'vue'
-import { upsertShiftRecord } from './_shared/shiftRecordStore'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { upsertShiftRecord, shiftRecordStore } from './_shared/shiftRecordStore'
+
+// When embedded inside OperationRecordView's modal, the host passes:
+//   initialDate  — open the ledger on that date
+//   confirmedBatches — { boiler: string[], gasification: string[] } of already-confirmed batches
+const props = defineProps<{
+  initialDate?: string
+  confirmedBatches?: { boiler: string[]; gasification: string[] }
+}>()
+const emit = defineEmits<{
+  (e: 'shift-confirmed', payload: { record_date: string; shift_batch: string; type: 'boiler' | 'gasification' }): void
+}>()
+onMounted(() => {
+  if (props.initialDate) selectedDate.value = props.initialDate
+  // Seed confirmed states from the host prop so the parent table's
+  // existing confirmations are reflected immediately.
+  if (props.confirmedBatches) {
+    for (const [type, batches] of Object.entries(props.confirmedBatches)) {
+      ;(batches as string[]).forEach(b => markBatchConfirmed(type as 'boiler' | 'gasification', b))
+    }
+  }
+  // Load any data already saved for this date so the form isn't empty
+  // on first open (e.g. when embedded in a modal for an existing row).
+  loadExistingData()
+})
 
 // ---------------------------------------------------------------------------
 // Requirement 1: Fine-grained visibility — 12 independent boolean keys
@@ -465,6 +508,72 @@ const gasData = ref<GasRow[]>([
 ])
 
 const dirty = ref(false)
+
+// Confirmed batch names for the current date, keyed by domain ('boiler' or 'gasification').
+// Storage key: `${type}:${batch}` so confirming one table does not affect the other.
+// Persisted in localStorage so the confirmed/编辑 state survives closing and reopening.
+const CONFIRM_STORAGE_KEY = 'tz_ledger_confirmed_batches_v2'
+function loadConfirmedBatches(): Record<string, string[]> {
+  try {
+    const raw = localStorage.getItem(CONFIRM_STORAGE_KEY)
+    if (!raw) return {}
+    return JSON.parse(raw) as Record<string, string[]>
+  } catch { return {} }
+}
+function persistConfirmedBatches() {
+  localStorage.setItem(CONFIRM_STORAGE_KEY, JSON.stringify(confirmedDateMap))
+}
+const confirmedDateMap = reactive<Record<string, string[]>>(loadConfirmedBatches())
+
+/** True if a domain+batch pair is confirmed for the currently selected date. */
+function isBatchConfirmed(type: 'boiler' | 'gasification', batch: string): boolean {
+  return (confirmedDateMap[selectedDate.value] ?? []).includes(`${type}:${batch}`)
+}
+/** Mark a domain+batch as confirmed and persist to localStorage. */
+function markBatchConfirmed(type: 'boiler' | 'gasification', batch: string) {
+  const date = selectedDate.value
+  if (!confirmedDateMap[date]) confirmedDateMap[date] = []
+  const key = `${type}:${batch}`
+  if (!confirmedDateMap[date].includes(key)) {
+    confirmedDateMap[date] = [...confirmedDateMap[date], key]
+    persistConfirmedBatches()
+  }
+}
+/** Unlock a domain+batch so it can be re-edited and re-confirmed. */
+function unlockBatch(type: 'boiler' | 'gasification', batch: string) {
+  const date = selectedDate.value
+  if (confirmedDateMap[date]) {
+    confirmedDateMap[date] = confirmedDateMap[date].filter(b => b !== `${type}:${batch}`)
+    persistConfirmedBatches()
+  }
+}
+
+/** When opening the form for a date that already has saved shift data, repopulate
+ *  the table rows so operators can see and edit existing values. */
+function loadExistingData() {
+  const existing = shiftRecordStore.filter(s => s.record_date === selectedDate.value)
+  for (const shift of existing) {
+    const boilerRow = boilerData.value.find(r => r.batch === shift.shift_batch)
+    if (boilerRow) {
+      const bc = shift.boiler_consumptions
+      boilerRow.subtotal = String(bc.subtotal || 0)
+      boilerRow.hl_A = String(bc.hl_A || 0); boilerRow.hl_B = String(bc.hl_B || 0)
+      boilerRow.jz_A = String(bc.jz_A || 0); boilerRow.jz_B = String(bc.jz_B || 0)
+      boilerRow.xz_A = String(bc.xz_A || 0); boilerRow.xz_B = String(bc.xz_B || 0)
+      boilerRow.wn_A = String(bc.wn_A || 0); boilerRow.wn_B = String(bc.wn_B || 0)
+      boilerRow.yl_A = String(bc.yl_A || 0); boilerRow.yl_B = String(bc.yl_B || 0)
+      boilerRow.lx_A = String(bc.lx_A || 0); boilerRow.lx_B = String(bc.lx_B || 0)
+    }
+    const gasRow = gasData.value.find(r => r.batch === shift.shift_batch)
+    if (gasRow) {
+      const gc = shift.gasification_consumptions
+      gasRow.coal_A = String(gc.coal_A || 0); gasRow.coal_B = String(gc.coal_B || 0)
+      gasRow.subtotal = String(gc.subtotal || 0)
+    }
+  }
+  // Also update the 总计 row
+  calculateMatrix()
+}
 const toast = reactive({
   visible: false,
   type: 'success' as 'success' | 'error' | 'info',
@@ -501,8 +610,11 @@ function showToast(type: 'success' | 'error' | 'info', message: string) {
   }, 3000)
 }
 
-/** Confirm a specific shift row and extract its data as a payload for OperationRecord */
-function confirmShiftRow(batchName: string) {
+/** Confirm a specific shift row. type distinguishes boiler from gasification so
+ *  confirming one never overwrites the other's confirmed state.
+ *  Always merges with existing store data so only the selected domain's values
+ *  are written, leaving the other domain's values untouched. */
+function confirmShiftRow(type: 'boiler' | 'gasification', batchName: string) {
   const boilerRow = boilerData.value.find(r => r.batch === batchName)
   const gasRow = gasData.value.find(r => r.batch === batchName)
 
@@ -511,39 +623,49 @@ function confirmShiftRow(batchName: string) {
     return
   }
 
+  // Read any existing record so we can preserve the other domain's values.
+  const existing = shiftRecordStore.find(
+    s => s.record_date === selectedDate.value && s.shift_batch === batchName
+  )
+
+  const boiler_consumptions = {
+    subtotal: parseFloat(boilerRow.subtotal) || 0,
+    hl_A: parseFloat(boilerRow.hl_A) || 0,
+    hl_B: parseFloat(boilerRow.hl_B) || 0,
+    jz_A: parseFloat(boilerRow.jz_A) || 0,
+    jz_B: parseFloat(boilerRow.jz_B) || 0,
+    xz_A: parseFloat(boilerRow.xz_A) || 0,
+    xz_B: parseFloat(boilerRow.xz_B) || 0,
+    wn_A: parseFloat(boilerRow.wn_A) || 0,
+    wn_B: parseFloat(boilerRow.wn_B) || 0,
+    yl_A: parseFloat(boilerRow.yl_A) || 0,
+    yl_B: parseFloat(boilerRow.yl_B) || 0,
+    lx_A: parseFloat(boilerRow.lx_A) || 0,
+    lx_B: parseFloat(boilerRow.lx_B) || 0,
+  }
+
+  const gasification_consumptions = {
+    subtotal: parseFloat(gasRow.subtotal) || 0,
+    coal_A: parseFloat(gasRow.coal_A) || 0,
+    coal_B: parseFloat(gasRow.coal_B) || 0,
+  }
+
   const shiftPayload = {
     record_date: selectedDate.value,
     shift_batch: batchName,
-    boiler_consumptions: {
-      subtotal: parseFloat(boilerRow.subtotal) || 0,
-      hl_A: parseFloat(boilerRow.hl_A) || 0,
-      hl_B: parseFloat(boilerRow.hl_B) || 0,
-      jz_A: parseFloat(boilerRow.jz_A) || 0,
-      jz_B: parseFloat(boilerRow.jz_B) || 0,
-      xz_A: parseFloat(boilerRow.xz_A) || 0,
-      xz_B: parseFloat(boilerRow.xz_B) || 0,
-      wn_A: parseFloat(boilerRow.wn_A) || 0,
-      wn_B: parseFloat(boilerRow.wn_B) || 0,
-      yl_A: parseFloat(boilerRow.yl_A) || 0,
-      yl_B: parseFloat(boilerRow.yl_B) || 0,
-      lx_A: parseFloat(boilerRow.lx_A) || 0,
-      lx_B: parseFloat(boilerRow.lx_B) || 0,
-    },
-    gasification_consumptions: {
-      subtotal: parseFloat(gasRow.subtotal) || 0,
-      coal_A: parseFloat(gasRow.coal_A) || 0,
-      coal_B: parseFloat(gasRow.coal_B) || 0,
-    },
+    // Only overwrite the domain being confirmed; keep the other from the store.
+    boiler_consumptions: type === 'boiler' ? boiler_consumptions
+      : (existing?.boiler_consumptions ?? boiler_consumptions),
+    gasification_consumptions: type === 'gasification' ? gasification_consumptions
+      : (existing?.gasification_consumptions ?? gasification_consumptions),
   }
 
-  // Persist to the shared in-memory store so OperationRecordView can read it.
-  // The store is keyed by (record_date, shift_batch), so re-confirming the same
-  // shift overwrites in place (no duplicate rows accumulate in the run-record
-  // report).
   upsertShiftRecord(shiftPayload)
+  markBatchConfirmed(type, batchName)
+  emit('shift-confirmed', { record_date: selectedDate.value, shift_batch: batchName, type })
 
-  console.log('[Confirm Shift] Saved to shiftRecordStore:', JSON.stringify(shiftPayload, null, 2))
-  showToast('success', `${batchName} 数据已确认保存（运行记录报表已同步）`)
+  console.log('[Confirm Shift]', type, batchName, JSON.stringify(shiftPayload, null, 2))
+  showToast('success', `${type === 'boiler' ? '锅炉' : '气化'} ${batchName} 已确认保存`)
 }
 
 // ---------------------------------------------------------------------------
@@ -1141,6 +1263,55 @@ td.td-silo-b .cell-input:focus {
 .btn-primary:hover {
   background: #3d6a9e;
   border-color: #3d6a9e;
+}
+
+/* Confirmed state — compact inline row */
+.confirmed-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.confirmed-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 8px;
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.btn-confirm {
+  height: 26px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 4px;
+}
+
+.btn-edit {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+  background: #ffffff;
+  color: #3b82f6;
+  border: 1px solid #bfdbfe;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.btn-edit:hover {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #1d4ed8;
 }
 
 /* -----------------------------------------------------------------------
