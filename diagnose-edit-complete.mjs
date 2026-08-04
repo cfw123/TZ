@@ -29,6 +29,8 @@ let   toastVisible  = null  // { type, message } | null  (captured via page.eval
 let   clickResult   = null  // raw return value of handleRowAction evaluated on page
 let   editingIdAfter = null  // editingId.value after the click
 
+const sleep = ms => new Promise(r => setTimeout(r, ms))
+
 // ── Launch ──────────────────────────────────────────────────────────────────
 const browser = await puppeteer.launch({
   executablePath: CHROME,
@@ -73,7 +75,7 @@ page.on('response', resp => {
 // ── Navigate ────────────────────────────────────────────────────────────────
 console.log('→ Navigating to http://localhost:5174/record ...')
 await page.goto('http://localhost:5174/record', { waitUntil: 'networkidle0', timeout: 30000 })
-await page.waitForTimeout(1000)  // let Vue hydrate
+await sleep(1000)  // let Vue hydrate
 
 // ── Find first row with "编辑" button ───────────────────────────────────────
 console.log('→ Looking for first row with "编辑" button ...')

@@ -1297,6 +1297,7 @@ const savedIds = reactive<Set<string>>(new Set())
 const savedDbIdMap = reactive<Map<string, string>>(new Map()) // localId -> db.id
 
 async function loadSavedIds() {
+  // 1. Sync from local cache first for instant rendering
   const rows = db.list<Record<string, unknown>>('operation_record_rows')
   rows.forEach(row => {
     const localId = buildLocalId(String(row.recordDate), String(row.shiftBatch))
@@ -1304,6 +1305,28 @@ async function loadSavedIds() {
     savedDbIdMap.set(localId, String(row.id))
     if (row.runGroup) runGroupSelections[localId] = String(row.runGroup)
   })
+
+  // 2. Fetch authoritative backend records from db.json via api.list()
+  // to ensure savedDbIdMap is strictly bound to real backend IDs
+  try {
+    const remoteRows = await api.list()
+    if (Array.isArray(remoteRows)) {
+      remoteRows.forEach((row: any) => {
+        const rDate = String(row.recordDate ?? row.record_date ?? '')
+        const sBatch = String(row.shiftBatch ?? row.shift_batch ?? '')
+        if (rDate && sBatch) {
+          const localId = buildLocalId(rDate, sBatch)
+          const realDbId = String(row.id ?? row._id ?? row.__id ?? '')
+          if (realDbId) {
+            savedIds.add(localId)
+            savedDbIdMap.set(localId, realDbId)
+          }
+        }
+      })
+    }
+  } catch (e) {
+    console.warn('[loadSavedIds] Failed to sync remote backend DB IDs:', e)
+  }
 }
 
 function buildLocalId(recordDate: string, shiftBatch: string) {
@@ -1382,10 +1405,18 @@ async function undoDelete() {
 }
 
 async function handleRowAction(rec: OperationRecordRow) {
-  if (editingId.value === String(rec.id)) {
+  const currentEditingId = editingId.value
+  if (currentEditingId === String(rec.id)) {
     // In edit mode → complete: save and exit
-    const ok = await (isSaved(rec.id) ? updateRecord(rec) : saveRecord(rec))
-    if (ok) editingId.value = null
+    const fn = isSaved(rec.id) ? updateRecord : saveRecord
+    const ok = await fn(rec)
+    // Only clear editingId if it's still pointing to this record
+    // (another click hasn't changed it in the meantime)
+    if (editingId.value === currentEditingId && editingId.value === String(rec.id)) {
+      if (ok) {
+        editingId.value = null
+      }
+    }
   } else {
     // Not in edit mode → enter edit mode
     editingId.value = String(rec.id)
@@ -1446,42 +1477,66 @@ async function saveRecord(rec: OperationRecordRow): Promise<boolean> {
       truckCount: rec.truck_count || null,
     }
     const created = await api.createRow(payload)
-    // Single write to local db via upsertShiftRecord — this:
-    //   1. syncs shiftRecordStore so the embedded DailyConsumption sees the row
-    //   2. writes to db.list with all metadata fields (mirroring updateRecord's payload)
-    //   3. returns the db id so savedDbIdMap can be updated
-    const dbRowId = upsertShiftRecord({
-      record_date: rec.record_date,
-      shift_batch: rec.shift_batch,
-      boiler_consumptions: rec.boiler_consumptions ?? { subtotal: 0, hl_A: 0, hl_B: 0, jz_A: 0, jz_B: 0, xz_A: 0, xz_B: 0, wn_A: 0, wn_B: 0, yl_A: 0, yl_B: 0, lx_A: 0, lx_B: 0 },
-      gasification_consumptions: rec.gasification_consumptions ?? { subtotal: 0, coal_A: 0, coal_B: 0 },
-      metadata: {
-        runGroup: rec.run_group || undefined,
-        executionStatus: rec.execution_status || undefined,
-        boilerBins: rec.boiler_bins || undefined,
-        boilerTime: rec.boiler_time || undefined,
-        boilerDuration: rec.boiler_duration || undefined,
-        boilerBlendXz: rec.boiler_blend_xz || undefined,
-        blendMix: rec.blend_mix || undefined,
-        gasificationBins: rec.gasification_bins || undefined,
-        gasificationTime: rec.gasification_time || undefined,
-        gasificationDuration: rec.gasification_duration || undefined,
-        reason: rec.reason || undefined,
-        remarks: rec.remarks || undefined,
-        truckUnloadTime: rec.truck_unload_time || undefined,
-        truckUnloadDuration: rec.truck_unload_duration || undefined,
-        truckCount: rec.truck_count || undefined,
-      },
-    })
-    // Promote the row's id from the temporary "new:..." draft to the
-    // canonical localId so subsequent isSaved() / savedDbIdMap lookups match
-    // the keys built by loadSavedIds() (i.e. `${recordDate}-${shiftBatch}`).
+    // Extract the real backend ID from the created response.
+    // The backend (db-json-api-plugin) returns { __id, id, ...record }.
+    // Use the short `id` field as it's what updateRow/deleteRow send in the URL.
+    const backendId = String(created?.id ?? created?.__id ?? '')
+
+    if (!backendId) {
+      throw new Error('Backend did not return an ID for the created record')
+    }
+
+    // CRITICAL: api.createRow writes to db.json (disk), but the localStorage
+    // cache used by db.list() is NOT automatically updated. We must re-fetch
+    // from the backend to sync the local cache, otherwise db.list() will miss
+    // this record and upsertShiftRecord will create a DUPLICATE with a different
+    // ID, breaking savedDbIdMap.
+    try {
+      const allRows = await api.list()
+      if (Array.isArray(allRows)) {
+        const saved = allRows.find(
+          (r: any) => String(r.recordDate ?? '') === rec.record_date &&
+                      String(r.shiftBatch ?? '') === rec.shift_batch
+        )
+        if (saved) {
+          upsertShiftRecord({
+            backendId,
+            record_date: rec.record_date,
+            shift_batch: rec.shift_batch,
+            boiler_consumptions: rec.boiler_consumptions ?? { subtotal: 0, hl_A: 0, hl_B: 0, jz_A: 0, jz_B: 0, xz_A: 0, xz_B: 0, wn_A: 0, wn_B: 0, yl_A: 0, yl_B: 0, lx_A: 0, lx_B: 0 },
+            gasification_consumptions: rec.gasification_consumptions ?? { subtotal: 0, coal_A: 0, coal_B: 0 },
+            metadata: {
+              runGroup: rec.run_group || undefined,
+              executionStatus: rec.execution_status || undefined,
+              boilerBins: rec.boiler_bins || undefined,
+              boilerTime: rec.boiler_time || undefined,
+              boilerDuration: rec.boiler_duration || undefined,
+              boilerBlendXz: rec.boiler_blend_xz || undefined,
+              blendMix: rec.blend_mix || undefined,
+              gasificationBins: rec.gasification_bins || undefined,
+              gasificationTime: rec.gasification_time || undefined,
+              gasificationDuration: rec.gasification_duration || undefined,
+              reason: rec.reason || undefined,
+              remarks: rec.remarks || undefined,
+              truckUnloadTime: rec.truck_unload_time || undefined,
+              truckUnloadDuration: rec.truck_unload_duration || undefined,
+              truckCount: rec.truck_count || undefined,
+            },
+          })
+        }
+      }
+    } catch (syncErr) {
+      console.warn('[saveRecord] Failed to sync local cache after create:', syncErr)
+    }
+
+    // Update savedDbIdMap with the REAL backend ID so subsequent
+    // updateRecord calls target the correct record in db.json.
     const localId = buildLocalId(rec.record_date, rec.shift_batch)
     savedIds.add(localId)
-    if (dbRowId) savedDbIdMap.set(localId, dbRowId)
-    // Also index the original draft id so any stale references in savingIds
-    // don't get stuck forever, and drop the in-memory draft so we don't
-    // double-show the row during the refreshTick window.
+    savedDbIdMap.set(localId, backendId)
+
+    // Drop the in-memory draft so we don't double-show the row during the
+    // refreshTrigger window.
     savingIds.delete(String(rec.id))
     newRowDrafts.value = newRowDrafts.value.filter(d => String(d.id) !== String(rec.id))
     refreshTrigger.value++
@@ -1549,7 +1604,10 @@ async function updateRecord(rec: OperationRecordRow): Promise<boolean> {
   }
   savingIds.add(String(rec.id))
   try {
+    // Include id: dbId in payload so the file-backed middleware always has
+    // the primary key, even if it is parsed from the URL and not the body.
     const payload = {
+      id: dbId,
       recordDate: rec.record_date,
       shiftBatch: rec.shift_batch,
       runGroup: rec.run_group || null,

@@ -32,6 +32,11 @@ export interface ShiftPayload {
   shift_batch: string
   boiler_consumptions: BoilerConsumption
   gasification_consumptions: GasificationConsumption
+  /** Optional real backend DB ID. When provided, upsertShiftRecord uses this
+   *  for db.update/create instead of trying to find an existing record by
+   *  date+shift. This is critical for saveRecord, which first creates a record
+   *  via api.createRow and then needs to sync the local cache with the real ID. */
+  backendId?: string
   /** Operational metadata (run-group, bins, time, etc.) merged in from
    *  OperationRecordView so they survive a confirmShiftRow round-trip.
    *  undefined fields are omitted (preserve existing); null fields are written
@@ -120,6 +125,13 @@ export function upsertShiftRecord(payload: ShiftPayload): string | undefined {
     truckUnloadTime: m.truckUnloadTime ?? null,
     truckUnloadDuration: m.truckUnloadDuration ?? null,
     truckCount: m.truckCount ?? null,
+  }
+  // Use the explicitly passed backendId if available (from saveRecord after
+  // api.createRow succeeds), otherwise fall back to finding by date+shift.
+  const explicitId = payload.backendId
+  if (explicitId) {
+    db.update('operation_record_rows', explicitId, dbRow)
+    return explicitId
   }
   if (row?.id) {
     db.update('operation_record_rows', String(row.id), dbRow)
