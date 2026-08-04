@@ -1,8 +1,13 @@
 <template>
   <div class="view-container">
-    <h2 class="view-title">锅炉/气化 {{ displayDate }} 消耗台账</h2>
+    <!-- Section title: show target shift name in scoped mode -->
+    <h2 class="view-title">
+      <template v-if="isScopedMode && targetShift">{{ targetShift }} 消耗台账</template>
+      <template v-else>锅炉/气化 {{ displayDate }} 消耗台账</template>
+    </h2>
 
-    <div class="toolbar">
+    <!-- Toolbar: hidden in scoped mode (date/batch are fixed by the host) -->
+    <div v-if="!isScopedMode" class="toolbar">
       <div class="date-selector">
         <input type="date" v-model="selectedDate" />
       </div>
@@ -17,11 +22,14 @@
          ============================================================ -->
     <div class="section-block">
       <div class="section-header">
-        <span class="section-title">锅炉 {{ displayDate }} 消耗</span>
+        <span class="section-title">
+          <template v-if="isScopedMode && targetShift">{{ targetShift }}</template>
+          <template v-else>锅炉 {{ displayDate }} 消耗</template>
+        </span>
       </div>
 
-      <!-- Requirement 1: Horizontal Card Grid Control Panel — replaces crowded popover -->
-      <div class="silo-control-panel">
+      <!-- Silo control panel: hidden in scoped mode -->
+      <div v-if="!isScopedMode" class="silo-control-panel">
         <div
           v-for="cat in ALL_CATS"
           :key="cat"
@@ -65,7 +73,7 @@
                   :colspan="CAT_COLSPANS[cat]"
                 >{{ CAT_LABELS[cat] }}</th>
               </template>
-              <th rowspan="2">操作</th>
+              <th v-if="!hideActions" rowspan="2">操作</th>
             </tr>
             <!-- Tier-2: one <th> per entry in ALL_COLS -->
             <tr class="tr-level-2">
@@ -82,7 +90,7 @@
           </thead>
           <tbody>
             <tr
-              v-for="row in boilerData"
+              v-for="row in scopedBoilerRows"
               :key="row.batch"
               :class="{ 'row-total': row.batch === '总计' }"
             >
@@ -105,7 +113,7 @@
                   @focus="e => (e.target as HTMLInputElement).select()"
                 />
               </td>
-              <td>
+              <td v-if="!hideActions">
                 <template v-if="row.batch !== '总计'">
                   <button
                     v-if="!isBatchConfirmed('boiler', row.batch)"
@@ -129,7 +137,10 @@
          ============================================================ -->
     <div class="section-block">
       <div class="section-header">
-        <span class="section-title">气化 {{ displayDate }} 消耗</span>
+        <span class="section-title">
+          <template v-if="isScopedMode && targetShift">{{ targetShift }}</template>
+          <template v-else>气化 {{ displayDate }} 消耗</template>
+        </span>
       </div>
       <div class="table-wrapper">
         <table class="coal-table">
@@ -139,12 +150,12 @@
               <th class="th-fixed-left-2">小计</th>
               <th>A仓原料煤</th>
               <th>B仓原料煤</th>
-              <th>操作</th>
+              <th v-if="!hideActions">操作</th>
             </tr>
           </thead>
           <tbody>
             <tr
-              v-for="row in gasData"
+              v-for="row in scopedGasRows"
               :key="row.batch"
               :class="{ 'row-total': row.batch === '总计' }"
             >
@@ -158,7 +169,7 @@
               <td>
                 <input class="cell-input" v-model="row.coal_B" @input="onGasCellInput(row)" @focus="e => (e.target as HTMLInputElement).select()" />
               </td>
-              <td>
+              <td v-if="!hideActions">
                 <template v-if="row.batch !== '总计'">
                   <button
                     v-if="!isBatchConfirmed('gasification', row.batch)"
@@ -198,10 +209,14 @@ import { upsertShiftRecord, shiftRecordStore } from './_shared/shiftRecordStore'
 
 // When embedded inside OperationRecordView's modal, the host passes:
 //   initialDate  — open the ledger on that date
+//   targetShift  — when set, only that single shift row is shown (scoped mode)
 //   confirmedBatches — { boiler: string[], gasification: string[] } of already-confirmed batches
+//   hideActions  — hide the trailing "操作" column (for read-only modal inspection)
 const props = defineProps<{
   initialDate?: string
+  targetShift?: string
   confirmedBatches?: { boiler: string[]; gasification: string[] }
+  hideActions?: boolean
 }>()
 const emit = defineEmits<{
   (e: 'shift-confirmed', payload: { record_date: string; shift_batch: string; type: 'boiler' | 'gasification' }): void
@@ -218,6 +233,32 @@ onMounted(() => {
   // Load any data already saved for this date so the form isn't empty
   // on first open (e.g. when embedded in a modal for an existing row).
   loadExistingData()
+})
+
+// ---------------------------------------------------------------------------
+// Single-Shift Scoped Mode
+// When targetShift is set, only that one shift row is displayed (no totals,
+// no other shifts, no silo control panel). Used when the view is embedded
+// inside OperationRecordView's modal for editing a specific shift.
+// ---------------------------------------------------------------------------
+const isScopedMode = computed(() => Boolean(props.targetShift))
+
+/** The single BoilerRow to show in scoped mode (or all rows in full mode). */
+const scopedBoilerRows = computed(() => {
+  if (isScopedMode.value && props.targetShift) {
+    const row = boilerData.value.find(r => r.batch === props.targetShift)
+    return row ? [row] : []
+  }
+  return boilerData.value
+})
+
+/** The single GasRow to show in scoped mode (or all rows in full mode). */
+const scopedGasRows = computed(() => {
+  if (isScopedMode.value && props.targetShift) {
+    const row = gasData.value.find(r => r.batch === props.targetShift)
+    return row ? [row] : []
+  }
+  return gasData.value
 })
 
 // ---------------------------------------------------------------------------

@@ -107,7 +107,7 @@
               </td>
               <td class="td-sticky td-sticky--2">
                 <select
-                  v-if="isNewDraft(rec.id) && editingId === String(rec.id)"
+                  v-if="editingId === String(rec.id)"
                   v-model="rec.shift_batch"
                   class="cell-input"
                 >
@@ -141,7 +141,6 @@
                   v-model="rec.execution_status"
                   class="cell-input"
                   @keydown="handleExecutionKeydown($event, rec)"
-                  placeholder="↑↓选择, Enter确认"
                   :disabled="editingId !== String(rec.id)"
                 />
               </td>
@@ -153,7 +152,6 @@
                     :class="{ 'cell-input--error': cellErrors['boiler_bins:' + rec.id] }"
                     @input="validateBoilerBins(rec, ($event.target as HTMLInputElement).value)"
                     @keydown="handleBoilerBinsKeydown($event, rec)"
-                    placeholder="↑↓选择, Enter确认"
                     :disabled="editingId !== String(rec.id)"
                   />
                   <span v-if="cellErrors['boiler_bins:' + rec.id]" class="cell-error">{{ cellErrors['boiler_bins:' + rec.id] }}</span>
@@ -167,7 +165,6 @@
                     :class="{ 'cell-input--error': timeCellErrors['boiler:' + rec.id] }"
                     @input="onTimeTextareaInput($event, rec, 'boiler')"
                     @keydown="handleBoilerTimeKeydown($event, rec)"
-                    placeholder="08:00~18:00"
                     rows="1"
                     :disabled="editingId !== String(rec.id)"
                   ></textarea>
@@ -212,7 +209,7 @@
                   class="cell-input cell-input--num"
                   min="0"
                   step="1"
-                  :disabled="editingId !== String(rec.id)"
+                  :disabled="rec.boiler_time ? true : editingId !== String(rec.id)"
                 />
                 <template v-else>{{ rec.boiler_duration || '' }}</template>
               </td>
@@ -221,7 +218,6 @@
                   <input
                     v-model="rec.blend_mix"
                     class="cell-input"
-                    placeholder="如：烟煤50%/焦煤30%/无烟煤20%"
                     @keydown="handleBlendMixKeydown($event, rec)"
                     :disabled="editingId !== String(rec.id)"
                   />
@@ -235,7 +231,6 @@
                     :class="{ 'cell-input--error': gasCellErrors[rec.id] }"
                     @input="validateGasBins(rec, ($event.target as HTMLInputElement).value)"
                     @keydown="handleGasBinsKeydown($event, rec)"
-                    placeholder="↑↓选择, Enter确认"
                     :disabled="editingId !== String(rec.id)"
                   />
                   <span v-if="gasCellErrors[rec.id]" class="cell-error">{{ gasCellErrors[rec.id] }}</span>
@@ -249,7 +244,6 @@
                     :class="{ 'cell-input--error': timeCellErrors['gasification:' + rec.id] }"
                     @input="onTimeTextareaInput($event, rec, 'gasification')"
                     @keydown="handleBoilerTimeKeydown($event, rec)"
-                    placeholder="↑↓选择, Enter确认"
                     rows="1"
                     :disabled="editingId !== String(rec.id)"
                   ></textarea>
@@ -281,7 +275,7 @@
                   class="cell-input cell-input--num"
                   min="0"
                   step="1"
-                  :disabled="editingId !== String(rec.id)"
+                  :disabled="rec.gasification_time ? true : editingId !== String(rec.id)"
                 />
                 <template v-else>{{ rec.gasification_duration || '' }}</template>
               </td>
@@ -292,7 +286,6 @@
                     class="cell-input cell-textarea cell-textarea--note"
                     @input="onNoteInput(rec, 'reason', ($event.target as HTMLTextAreaElement).value)"
                     @keydown="handleReasonKeydown($event, rec)"
-                    placeholder="↑↓选择, Enter确认"
                     rows="1"
                     :disabled="editingId !== String(rec.id)"
                   ></textarea>
@@ -305,7 +298,6 @@
                     class="cell-input cell-textarea cell-textarea--note"
                     @input="onNoteInput(rec, 'remarks', ($event.target as HTMLTextAreaElement).value)"
                     @keydown="handleReasonKeydown($event, rec)"
-                    placeholder="↑↓选择, Enter确认"
                     rows="1"
                     :disabled="editingId !== String(rec.id)"
                   ></textarea>
@@ -319,7 +311,6 @@
                     :class="{ 'cell-input--error': timeCellErrors['truck:' + rec.id] }"
                     @input="onTimeTextareaInput($event, rec, 'truck')"
                     @keydown="handleBoilerTimeKeydown($event, rec)"
-                    placeholder="↑↓选择, Enter确认"
                     rows="1"
                     :disabled="editingId !== String(rec.id)"
                   ></textarea>
@@ -335,7 +326,7 @@
                   class="cell-input cell-input--num"
                   min="0"
                   step="1"
-                  :disabled="editingId !== String(rec.id)"
+                  :disabled="rec.truck_unload_time ? true : editingId !== String(rec.id)"
                 />
                 <template v-else>{{ rec.truck_unload_duration || '' }}</template>
               </td>
@@ -404,6 +395,8 @@
                  so the table picks up the new values. -->
             <DailyConsumption
               :initial-date="selectedRecord.record_date"
+              :target-shift="selectedRecord.shift_batch"
+              :hide-actions="isSaved(selectedRecord.id) && editingId !== String(selectedRecord.id)"
               @shift-confirmed="onLedgerShiftConfirmed"
             />
           </div>
@@ -417,7 +410,10 @@
 
     <!-- Inline toast for run-group confirmation -->
     <Transition name="toast-fade">
-      <div v-if="toastMessage" class="run-group-toast">✓ {{ toastMessage }}</div>
+      <div v-if="toastState.visible" class="run-group-toast" :class="`toast--${toastState.type}`">
+        <span class="toast-icon">{{ toastState.type === 'success' ? '✓' : toastState.type === 'error' ? '✕' : 'ℹ' }}</span>
+        <span>{{ toastState.message }}</span>
+      </div>
     </Transition>
   </div>
 </template>
@@ -427,7 +423,7 @@ import { ref, computed, reactive, watch, onMounted, onUnmounted } from 'vue'
 import type { OperationRecord, BoilerConsumption, GasificationConsumption } from './_shared/shiftRecordStore'
 import { db } from './_shared/dbService'
 import { api } from '@/api.js'
-import { upsertShiftRecord } from './_shared/shiftRecordStore'
+import { upsertShiftRecord, shiftRecordStore } from './_shared/shiftRecordStore'
 import DailyConsumption from './DailyConsumption.vue'
 
 // Re-export for in-template use so the legacy type names keep working.
@@ -1102,6 +1098,8 @@ const filteredRecords = computed<OperationRecordRow[]>(() => {
   const activeDate = filterDate.value || defaultDate
   return records.value
     .filter(rec => {
+      // Always keep unsaved new drafts visible in the current working view.
+      if (isNewDraft(rec.id)) return true
       if (!activeDate) return true
       const d = rec.record_date
       if (filterGranularity.value === 'day') return d === activeDate
@@ -1156,11 +1154,21 @@ function closeDetail() {
   // back into shiftRecordStore so the next confirmShiftRow in DailyConsumption
   // preserves it through upsertShiftRecord → db.update (metadata is now merged).
   if (selectedRecord.value) {
+    // Pull the freshest consumptions from local store so the close doesn't
+    // overwrite fresh modal edits with stale in-memory references.
+    const latestRow = db.list<Record<string, unknown>>('operation_record_rows').find(
+      r => String(r.recordDate ?? r.record_date ?? '') === selectedRecord.value!.record_date &&
+           String(r.shiftBatch ?? r.shift_batch ?? '') === selectedRecord.value!.shift_batch
+    )
+    const currentBoiler = (latestRow?.boilerConsumptions as BoilerConsumption | undefined)
+      ?? selectedRecord.value.boiler_consumptions
+    const currentGas = (latestRow?.gasificationConsumptions as GasificationConsumption | undefined)
+      ?? selectedRecord.value.gasification_consumptions
     upsertShiftRecord({
       record_date: selectedRecord.value.record_date,
       shift_batch: selectedRecord.value.shift_batch,
-      boiler_consumptions: selectedRecord.value.boiler_consumptions,
-      gasification_consumptions: selectedRecord.value.gasification_consumptions,
+      boiler_consumptions: currentBoiler,
+      gasification_consumptions: currentGas,
       metadata: {
         runGroup: selectedRecord.value.run_group,
         executionStatus: selectedRecord.value.execution_status,
@@ -1187,8 +1195,21 @@ function closeDetail() {
 }
 
 /** Fired when DailyConsumption confirms a shift — bumps refreshTrigger so the
- *  parent table immediately shows the newly saved subtotal for that batch. */
-function onLedgerShiftConfirmed(_payload: { record_date: string; shift_batch: string; type: 'boiler' | 'gasification' }) {
+ *  parent table immediately shows the newly saved subtotal for that batch,
+ *  and syncs the latest consumptions back into the modal's selectedRecord so
+ *  the next closeDetail() doesn't overwrite the fresh edits. */
+function onLedgerShiftConfirmed(payload: { record_date: string; shift_batch: string; type: 'boiler' | 'gasification' }) {
+  if (selectedRecord.value
+      && selectedRecord.value.record_date === payload.record_date
+      && selectedRecord.value.shift_batch === payload.shift_batch) {
+    const latest = shiftRecordStore.find(
+      s => s.record_date === payload.record_date && s.shift_batch === payload.shift_batch
+    )
+    if (latest) {
+      selectedRecord.value.boiler_consumptions = { ...latest.boiler_consumptions }
+      selectedRecord.value.gasification_consumptions = { ...latest.gasification_consumptions }
+    }
+  }
   refreshTrigger.value++
 }
 
@@ -1204,14 +1225,20 @@ onUnmounted(() => document.removeEventListener('keydown', onModalKeydown))
 // ---------------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------------
-const toastMessage = ref<string>('')
+const toastState = reactive<{ visible: boolean; message: string; type: 'success' | 'error' | 'info' }>({
+  visible: false,
+  message: '',
+  type: 'success',
+})
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 
-function showToast(_type: 'success' | 'error' | 'info', message: string) {
-  toastMessage.value = message
+function showToast(type: 'success' | 'error' | 'info', message: string) {
+  toastState.type = type
+  toastState.message = message
+  toastState.visible = true
   if (toastTimer) clearTimeout(toastTimer)
   toastTimer = setTimeout(() => {
-    toastMessage.value = ''
+    toastState.visible = false
   }, 2500)
 }
 
@@ -1275,6 +1302,7 @@ async function loadSavedIds() {
     const localId = buildLocalId(String(row.recordDate), String(row.shiftBatch))
     savedIds.add(localId)
     savedDbIdMap.set(localId, String(row.id))
+    if (row.runGroup) runGroupSelections[localId] = String(row.runGroup)
   })
 }
 
@@ -1356,16 +1384,30 @@ async function undoDelete() {
 async function handleRowAction(rec: OperationRecordRow) {
   if (editingId.value === String(rec.id)) {
     // In edit mode → complete: save and exit
-    await (isSaved(rec.id) ? updateRecord(rec) : saveRecord(rec))
-    editingId.value = null
+    const ok = await (isSaved(rec.id) ? updateRecord(rec) : saveRecord(rec))
+    if (ok) editingId.value = null
   } else {
     // Not in edit mode → enter edit mode
     editingId.value = String(rec.id)
   }
 }
 
-async function saveRecord(rec: OperationRecordRow) {
-  if (savingIds.has(String(rec.id))) return
+async function saveRecord(rec: OperationRecordRow): Promise<boolean> {
+  if (savingIds.has(String(rec.id))) return false
+  // Sweep stale error entries for this row so cleared cells don't silently
+  // block the save with an old message.
+  for (const key of [
+    rec.id,
+    'boiler_bins:' + rec.id,
+    'boiler:' + rec.id,
+    'gasification:' + rec.id,
+    'truck:' + rec.id,
+  ]) {
+    if (runGroupErrors[key] === '' || runGroupErrors[key] === undefined) delete runGroupErrors[key]
+    if (cellErrors[key] === '' || cellErrors[key] === undefined) delete cellErrors[key]
+    if (gasCellErrors[key] === '' || gasCellErrors[key] === undefined) delete gasCellErrors[key]
+    if (timeCellErrors[key] === '' || timeCellErrors[key] === undefined) delete timeCellErrors[key]
+  }
   const err = runGroupErrors[rec.id]
     || cellErrors['boiler_bins:' + rec.id]
     || gasCellErrors[rec.id]
@@ -1374,7 +1416,7 @@ async function saveRecord(rec: OperationRecordRow) {
     || timeCellErrors['truck:' + rec.id]
   if (err) {
     showToast('error', `请先修正红色报错再保存：${err}`)
-    return
+    return false
   }
   savingIds.add(String(rec.id))
   try {
@@ -1444,19 +1486,66 @@ async function saveRecord(rec: OperationRecordRow) {
     newRowDrafts.value = newRowDrafts.value.filter(d => String(d.id) !== String(rec.id))
     refreshTrigger.value++
     showToast('success', `${rec.record_date} · ${rec.shift_batch} 已保存到数据库`)
+    return true
   } catch (e) {
     showToast('error', `保存失败: ${e instanceof Error ? e.message : e}`)
+    return false
   } finally {
     savingIds.delete(String(rec.id))
   }
 }
 
-async function updateRecord(rec: OperationRecordRow) {
-  if (savingIds.has(String(rec.id))) return
-  const dbId = savedDbIdMap.get(String(rec.id))
-  if (!dbId) {
-    showToast('error', '未找到已保存记录，无法修改')
-    return
+async function updateRecord(rec: OperationRecordRow): Promise<boolean> {
+  if (savingIds.has(String(rec.id))) return false
+  // Sweep stale error entries for this row so cleared cells don't silently
+  // block the save with an old message.
+  for (const key of [
+    rec.id,
+    'boiler_bins:' + rec.id,
+    'boiler:' + rec.id,
+    'gasification:' + rec.id,
+    'truck:' + rec.id,
+  ]) {
+    if (runGroupErrors[key] === '' || runGroupErrors[key] === undefined) delete runGroupErrors[key]
+    if (cellErrors[key] === '' || cellErrors[key] === undefined) delete cellErrors[key]
+    if (gasCellErrors[key] === '' || gasCellErrors[key] === undefined) delete gasCellErrors[key]
+    if (timeCellErrors[key] === '' || timeCellErrors[key] === undefined) delete timeCellErrors[key]
+  }
+  // Mirror saveRecord's validation guardrail — refuse to write if any cell error
+  // is showing so we don't get stuck in savingIds while the user sees a red cell.
+  const err = runGroupErrors[rec.id]
+    || cellErrors['boiler_bins:' + rec.id]
+    || gasCellErrors[rec.id]
+    || timeCellErrors['boiler:' + rec.id]
+    || timeCellErrors['gasification:' + rec.id]
+    || timeCellErrors['truck:' + rec.id]
+  if (err) {
+    showToast('error', `请先修正红色报错再保存：${err}`)
+    return false
+  }
+  // Bulletproof DB primary key resolution. Try, in order:
+  //   1. savedDbIdMap by current rec.id (canonical local id)
+  //   2. rec.db_id (attached during buildRow)
+  //   3. raw rec.id (in case the row was promoted but rec.id not refreshed)
+  // Composite date-shift keys (e.g. "2026-08-01-白班") built by
+  // buildLocalId() must never reach api.updateRow — they're synthetic.
+  const COMPOSITE_LOCAL_ID = /^\d{4}-\d{2}-\d{2}-/
+  const candidateId = savedDbIdMap.get(String(rec.id)) || rec.db_id || String((rec as unknown as { id: string | number }).id) || null
+  if (!candidateId
+      || String(candidateId).startsWith('new:')
+      || COMPOSITE_LOCAL_ID.test(String(candidateId))) {
+    showToast('error', '未找到匹配的数据库记录 ID，正在尝试作为新记录保存…')
+    return await saveRecord(rec)
+  }
+  const dbId = candidateId
+  // Sync the latest consumptions from the local store so an earlier modal
+  // confirmShiftRow on this same row isn't overwritten with stale rec.* values.
+  const latestStoreRow = shiftRecordStore.find(
+    s => s.record_date === rec.record_date && s.shift_batch === rec.shift_batch
+  )
+  if (latestStoreRow) {
+    rec.boiler_consumptions = latestStoreRow.boiler_consumptions
+    rec.gasification_consumptions = latestStoreRow.gasification_consumptions
   }
   savingIds.add(String(rec.id))
   try {
@@ -1485,7 +1574,18 @@ async function updateRecord(rec: OperationRecordRow) {
       truckUnloadDuration: rec.truck_unload_duration || null,
       truckCount: rec.truck_count || null,
     }
-    await api.updateRow(dbId, payload)
+    try {
+      await api.updateRow(dbId, payload)
+    } catch (err: unknown) {
+      // 404 / Not Found → the record no longer exists on the backend (e.g. db
+      // was wiped). Fall back to creating it as new instead of throwing.
+      const errMsg = String((err as { message?: unknown })?.message || err || '').toLowerCase()
+      if (errMsg.includes('404') || errMsg.includes('not found')) {
+        console.warn(`[updateRecord] Backend ID ${dbId} not found (404). Falling back to saveRecord (createRow)…`)
+        return await saveRecord(rec)
+      }
+      throw err
+    }
     // Keep shiftRecordStore in sync so the embedded DailyConsumption
     // sees the latest metadata when the modal is next opened.
     upsertShiftRecord({
@@ -1513,8 +1613,10 @@ async function updateRecord(rec: OperationRecordRow) {
     })
     refreshTrigger.value++
     showToast('success', `${rec.record_date} · ${rec.shift_batch} 已更新`)
+    return true
   } catch (e) {
     showToast('error', `修改失败: ${e instanceof Error ? e.message : e}`)
+    return false
   } finally {
     savingIds.delete(String(rec.id))
   }
@@ -1537,9 +1639,14 @@ function handleCreate() {
     yl_A: 0, yl_B: 0, lx_A: 0, lx_B: 0,
   }
   const emptyGas: GasificationConsumption = { subtotal: 0, coal_A: 0, coal_B: 0 }
+  const activeMonth = filterDate.value || (isDefaultView.value ? defaultMonthStr() : '')
+  const todayStr = toLocalDateString(new Date())
+  const defaultDateStr = (activeMonth && !todayStr.startsWith(activeMonth))
+    ? `${activeMonth}-01`
+    : todayStr
   const draft: OperationRecordRow = {
     id: draftId,
-    record_date: toLocalDateString(new Date()),
+    record_date: defaultDateStr,
     shift_batch: '白班',
     run_group: runGroupSelections[draftId] ?? '一班',
     execution_status: '',
@@ -1562,12 +1669,11 @@ function handleCreate() {
     gasification_daily_total: 0,
   }
   newRowDrafts.value = [draft, ...newRowDrafts.value]
+  persistRunGroupSelections()
   // Enter edit mode on the draft so the user can immediately start filling it.
   editingId.value = String(draft.id)
   // Reset pagination so the new row is visible without scrolling.
   currentPage.value = 1
-  // Clear default-view filter so the new draft isn't hidden behind it.
-  isDefaultView.value = false
   refreshTrigger.value++
 }
 
@@ -2056,12 +2162,11 @@ function getShiftKey(shift: string): string {
   resize: none;
   overflow: hidden;
   min-height: 28px;
-  line-height: 1.35;
+  line-height: 1.4;
   white-space: pre-wrap;
   word-break: break-all;
   font-family: inherit;
-  padding-top: 4px;
-  padding-bottom: 4px;
+  padding: 3px 8px;
   width: 100%;
   box-sizing: border-box;
 }
@@ -2115,6 +2220,14 @@ function getShiftKey(shift: string): string {
 .cell-input:focus {
   border-color: #2563eb;
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+  background: #ffffff;
+}
+
+.cell-input:disabled {
+  background: transparent;
+  border-color: transparent;
+  color: inherit;
+  cursor: default;
 }
 
 .cell-input--error {
@@ -2180,6 +2293,24 @@ function getShiftKey(shift: string): string {
   font-weight: 600;
   box-shadow: 0 8px 24px rgba(15, 118, 110, 0.25);
   z-index: 10000;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.run-group-toast .toast-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.run-group-toast.toast--error {
+  background: rgba(220, 38, 38, 0.95);
+  box-shadow: 0 8px 24px rgba(220, 38, 38, 0.3);
+}
+
+.run-group-toast.toast--info {
+  background: rgba(37, 99, 235, 0.95);
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.3);
 }
 
 .toast-fade-enter-active,
