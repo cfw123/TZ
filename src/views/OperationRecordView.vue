@@ -163,7 +163,7 @@
                     :value="rec.boiler_time"
                     class="cell-input cell-textarea"
                     :class="{ 'cell-input--error': timeCellErrors['boiler:' + rec.id] }"
-                    @input="onTimeTextareaInput($event, rec, 'boiler')"
+                    @input="onTimeTextareaInput($event, rec, 'boiler'); autoResizeTextarea($event)"
                     @keydown="handleBoilerTimeKeydown($event, rec)"
                     rows="1"
                     :disabled="editingId !== String(rec.id)"
@@ -242,7 +242,7 @@
                     :value="rec.gasification_time"
                     class="cell-input cell-textarea"
                     :class="{ 'cell-input--error': timeCellErrors['gasification:' + rec.id] }"
-                    @input="onTimeTextareaInput($event, rec, 'gasification')"
+                    @input="onTimeTextareaInput($event, rec, 'gasification'); autoResizeTextarea($event)"
                     @keydown="handleBoilerTimeKeydown($event, rec)"
                     rows="1"
                     :disabled="editingId !== String(rec.id)"
@@ -309,7 +309,7 @@
                     :value="rec.truck_unload_time"
                     class="cell-input cell-textarea"
                     :class="{ 'cell-input--error': timeCellErrors['truck:' + rec.id] }"
-                    @input="onTimeTextareaInput($event, rec, 'truck')"
+                    @input="onTimeTextareaInput($event, rec, 'truck'); autoResizeTextarea($event)"
                     @keydown="handleBoilerTimeKeydown($event, rec)"
                     rows="1"
                     :disabled="editingId !== String(rec.id)"
@@ -516,6 +516,13 @@ const runGroupErrors = reactive<Record<string, string>>({})
 const cellErrors = reactive<Record<string, string>>({})
 const gasCellErrors = reactive<Record<string, string>>({})
 const timeCellErrors = reactive<Record<string, string>>({})
+
+/** Auto-resize textarea height to fit content */
+function autoResizeTextarea(e: Event) {
+  const el = e.target as HTMLTextAreaElement
+  el.style.height = 'auto'
+  el.style.height = el.scrollHeight + 'px'
+}
 
 function handleTimeInput(rec: OperationRecordRow, field: 'boiler' | 'gasification' | 'truck', value: string) {
   const sanitized = value.replace(/[,、]/g, '\n').replace(/~/g, '-').replace(/[ \t\r]+/g, '\n')
@@ -2230,7 +2237,8 @@ function getShiftKey(shift: string): string {
 }
 
 .td-time {
-  min-width: 150px;
+  min-width: 180px;
+  white-space: nowrap;
 }
 
 .td-count {
@@ -2257,9 +2265,10 @@ function getShiftKey(shift: string): string {
 }
 
 .cell-input {
-  field-sizing: content;
+  width: 100%;
   min-width: 4ch;
-  max-width: 100%;
+  max-width: 200px;
+  field-sizing: content;
   height: 28px;
   padding: 0 8px;
   border: 1px solid #e2e8f0;
@@ -2269,6 +2278,14 @@ function getShiftKey(shift: string): string {
   font-size: 13px;
   outline: none;
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+textarea.cell-input {
+  height: auto;
+  overflow: hidden;
+  resize: none;
+  line-height: 1.4;
+  box-sizing: border-box;
 }
 
 .cell-input:hover {
