@@ -96,7 +96,7 @@
             >
               <td class="td-fixed-left td-batch">{{ row.batch }}</td>
               <td class="td-fixed-left-2">
-                <input class="cell-input" v-model="row.subtotal" @input="onInput" @focus="e => (e.target as HTMLInputElement).select()" />
+                <input class="cell-input" v-model="row.subtotal" @input="onInput" @focus="e => (e.target as HTMLInputElement).select()" :disabled="isRowLocked('boiler', row.batch)" />
               </td>
               <!-- One <td> per entry in ALL_COLS — exact same array Tier-2 uses -->
               <td
@@ -106,8 +106,8 @@
               >
                 <input
                   class="cell-input"
-                  :class="{ 'cell-input--disabled': col.disabled }"
-                  :disabled="col.disabled"
+                  :class="{ 'cell-input--disabled': col.disabled || isRowLocked('boiler', row.batch) }"
+                  :disabled="col.disabled || isRowLocked('boiler', row.batch)"
                   :value="col.disabled ? forceZero(row, col.cat + col.sub) : (row as Record<string, string>)[col.cat + col.sub]"
                   @input="e => onCellInput(e, row, col)"
                   @focus="e => (e.target as HTMLInputElement).select()"
@@ -161,13 +161,13 @@
             >
               <td class="td-fixed-left td-batch">{{ row.batch }}</td>
               <td class="td-fixed-left-2">
-                <input class="cell-input" v-model="row.subtotal" @focus="e => (e.target as HTMLInputElement).select()" @blur="row.subtotal = String((parseFloat(row.coal_A) || 0) + (parseFloat(row.coal_B) || 0))" />
+                <input class="cell-input" v-model="row.subtotal" @focus="e => (e.target as HTMLInputElement).select()" @blur="row.subtotal = String((parseFloat(row.coal_A) || 0) + (parseFloat(row.coal_B) || 0))" :disabled="isRowLocked('gasification', row.batch)" />
               </td>
               <td>
-                <input class="cell-input" v-model="row.coal_A" @input="onGasCellInput(row)" @focus="e => (e.target as HTMLInputElement).select()" />
+                <input class="cell-input" v-model="row.coal_A" @input="onGasCellInput(row)" @focus="e => (e.target as HTMLInputElement).select()" :disabled="isRowLocked('gasification', row.batch)" />
               </td>
               <td>
-                <input class="cell-input" v-model="row.coal_B" @input="onGasCellInput(row)" @focus="e => (e.target as HTMLInputElement).select()" />
+                <input class="cell-input" v-model="row.coal_B" @input="onGasCellInput(row)" @focus="e => (e.target as HTMLInputElement).select()" :disabled="isRowLocked('gasification', row.batch)" />
               </td>
               <td v-if="!hideActions">
                 <template v-if="row.batch !== '总计'">
@@ -587,6 +587,16 @@ function unlockBatch(type: 'boiler' | 'gasification', batch: string) {
     confirmedDateMap[date] = confirmedDateMap[date].filter(b => b !== `${type}:${batch}`)
     persistConfirmedBatches()
   }
+}
+
+/** A shift row's inputs are locked if:
+ *  1. hideActions is true (parent requested read-only inspection), OR
+ *  2. this specific domain+batch is already confirmed AND the user has not
+ *     explicitly unlocked it via unlockBatch(). */
+function isRowLocked(type: 'boiler' | 'gasification', batch: string): boolean {
+  if (props.hideActions) return true
+  if (batch === '总计') return true
+  return isBatchConfirmed(type, batch)
 }
 
 /** When opening the form for a date that already has saved shift data, repopulate
